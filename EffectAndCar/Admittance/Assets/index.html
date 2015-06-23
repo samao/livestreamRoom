@@ -1,0 +1,88 @@
+<!-- saved from url=(0014)about:internet -->
+ <html lang="en">
+ <head>
+ <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+ <title>Park and Login</title>
+ <script language="JavaScript">
+     var jsReady = false;
+	 var count=0;
+     function isReady() {
+         return jsReady;
+     }
+     function pageInit() {
+         jsReady = true;
+         //document.forms["form1"].output.value += "\n" + "JavaScript is ready.\n";
+		 //sendToActionScript("1")
+     }
+     function thisMovie(movieName) {
+         if (navigator.appName.indexOf("Microsoft") != -1) {
+             return window[movieName];
+         } else {
+             return document[movieName];
+         }
+     }
+     function sendToActionScript(value) {
+		//alert(thisMovie("StarlingWork"))
+         //thisMovie("StarlingWork").FeedBack(value);	
+		 
+     }
+     function playGame() {
+         document.forms["form1"].output.value += "ActionScript says: " + "sasas" + "\n";
+		 document.forms["form1"].input.value=count++
+		 if(count>8)count=0;
+		// alert("sasas")
+     }
+	 function gotoPark(o){
+		 thisMovie("butPark").PlayBut()
+	}
+	 
+	 function OpenPark(arg){
+		alert("arg");
+	 }
+	 
+ </script>
+ </head>
+ <body onload="pageInit();">
+	
+	<script>
+		//sendToActionScript("2")
+	</script>
+	<table>
+	<tr>
+     <object classid="clsid:D27CDB6E-AE6D-11cf-96B8-444553540000"
+             id="StarlingWork"
+             codebase="http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab">
+         <param name="movie" value="StarlingWork.swf" />
+         <param name="quality" value="high" />
+		 <param name="wmode" value="transparent"/>
+         <param name="bgcolor" value="#869ca7" />
+         <param name="allowScriptAccess" value="*" />
+         <embed src="StarlingWork.swf" quality="high" bgcolor="#869ca7"
+             name="StarlingWork" align="middle"
+             play="true" loop="false" quality="high" allowScriptAccess="*"
+             type="application/x-shockwave-flash"
+             pluginspage="http://www.macromedia.com/go/getflashplayer">
+         </embed>
+     </object>     
+    </tr>
+    <tr>
+     <object classid="clsid:D27CDB6E-AE6D-11cf-96B8-444553540000"
+             id="butPark"
+             codebase="http://download.macromedia.com/pub/shockwave/cabs/flash/swflash.cab">
+         <param name="movie" value="butPark.swf" />
+         <param name="quality" value="high" />
+		 <param name="wmode" value="transparent"/>
+         <param name="bgcolor" value="#869ca7" />
+         <param name="allowScriptAccess" value="*" />
+         <embed src="butPark.swf" quality="high" bgcolor="#869ca7"
+             name="butPark" align="middle"
+             play="true" loop="false" quality="high" allowScriptAccess="*"
+             type="application/x-shockwave-flash"
+             pluginspage="http://www.macromedia.com/go/getflashplayer">
+         </embed>
+     </object>  
+     </tr>   
+    </table>
+    
+ </body>
+ </html>

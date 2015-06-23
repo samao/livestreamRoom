@@ -1,0 +1,74 @@
+package com.net.socket 
+{
+	import flash.events.ErrorEvent;
+	import flash.events.Event;
+	import flash.events.ProgressEvent;
+	import flash.utils.Timer;
+	import flash.events.TimerEvent;
+	/**
+	 * ...843 策略socket
+	 * @author Wen
+	 */
+	public class SecuritySocket extends BaseSocket
+	{
+		private var _connSucess:Function;
+		private var closeTimer:Timer;
+		private var is843:Boolean = false;
+		public function SecuritySocket(connSucess:Function) 
+		{
+			super();
+			this.name="SecuritySocket";
+			this.timeout = 10000;
+			this._connSucess = connSucess;
+		}
+		
+		
+		override protected function connectHandler(e:Event):void {
+			writeUTFBytes("<policy-file-request/>");
+			flush();
+		}
+		override protected function errorHandler(e:ErrorEvent):void {
+			//super.errorHandler(e);
+			if (this.connecting) {
+				this.setImmediatelyClose();
+			}else{
+				callBack(false);
+			}
+		}
+		override protected function dataHandler(e:ProgressEvent):void {
+			//trace("Socket SecuritySocket 843 ok");
+			is843 = true;
+			this.setImmediatelyClose();
+			callBack(true);
+		}
+		
+		override public function closeToDo():void {
+			if (is843) return;
+			if(closeTimer==null){
+				closeTimer = new Timer(3000,1);
+				closeTimer.addEventListener(TimerEvent.TIMER, closeTimerFun);
+			}
+			if (closeTimer.running) {
+				return ;
+			}
+			//trace("Socket SecuritySocket 843 closeToDo:"+closeTimer.running);
+			closeTimer.reset();
+			closeTimer.start();
+		}
+		private function closeTimerFun(e:TimerEvent):void {
+			//trace("Socket SecuritySocket 843 againConnect");
+			this.againConnect();
+		}
+		private function callBack(state:Boolean):void {
+			//trace("Socket SecuritySocket 843 callBack:" + state);
+			if (state) {
+				if(this._connSucess!=null)this._connSucess(state);
+			}else {
+				closeToDo();
+			}
+			
+		}
+		
+	}
+
+}

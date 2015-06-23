@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:TileGroup xmlns:fx="http://ns.adobe.com/mxml/2009"
+			 xmlns:s="library://ns.adobe.com/flex/spark"
+			 xmlns:mx="library://ns.adobe.com/flex/mx"
+			 orientation="rows" paddingBottom="0" paddingLeft="0" paddingRight="0" paddingTop="0">
+	<fx:Script>
+		<![CDATA[
+			import com.guagua.events.CarEvent;
+			import com.guagua.normal.FUserInfor;
+			import com.guagua.normal.FUserListManager;
+			
+			import gs.*;
+			
+			import mx.containers.Box;
+			import mx.core.UIComponent;
+			
+			import spark.components.Button;
+			
+			private var xdstScale:Number=1;
+			private var ydstScale:Number=1;
+			
+			/**顶点距离**/
+			private var topNum:Number=10;
+			
+			/**
+			 * 插入显示列表
+			 * @param car:插入显示列表车的组件
+			 * @return 插入成功返回true
+			 * */
+			public function insertCar(car:CarUi):uint{		
+				//car.toolTip="价:"+String(car.userInfor.m_wCarOrder)+",贵:"+String(car.userInfor.m_iUserNobilityLevel)+",会:"+String(car.userInfor.m_iUserVipLevel)+",时:"+String(car.userInfor.m_i64UserComeinTime);
+				var index:uint=findIndex(car.userInfor)	
+				
+				for(var i:uint=0;i<this.numElements;i++){
+					var carDef:CarUi=this.getElementAt(i) as CarUi;
+					if(carDef!=null&&carDef.userInfor.m_i64UserID==car.userInfor.m_i64UserID){
+						return uint.MAX_VALUE;
+					}
+				}
+				this.addElementAt(car,index);	
+				//alignLocation();
+				fadeInStage(car);							
+				//trace(car.skin.x,getChildIndex(car),this.numChildren,requestedColumnCount);
+				return index;
+			}	
+			/**对齐位置**/
+			public function alignLocation():void{
+				//trace("-----------------");
+				for(var i:int=0;i<numChildren;i++){
+					var _index:int=getChildIndex(this.getChildAt(i));
+					
+					var _x:Number=this.getChildAt(i)["skin"].x;
+					
+					if((_index)%requestedColumnCount==0){
+						this.getChildAt(i)["skin"].x=0;
+						
+					}else{
+						this.getChildAt(i)["skin"].x=0;
+					}
+					//trace("====",_index,this.getChildAt(i)["skin"].x,columnWidth,this.getChildAt(i)["skin"].width);
+				}
+			}
+			
+			/**
+			 * 车辆淡入动画
+			 * @param arg:车辆模型
+			 * */
+			private function fadeInStage(arg:CarUi):void{
+				//动画
+				var _x:Number=arg.skin.x+25;
+				/*var _index:int=getChildIndex(arg);
+				if((_index+1)%requestedColumnCount==0 || _index==0){
+					_x=-30;
+					trace("====");
+				}*/
+				arg.skin.scaleX=arg.skin.scaleY=.3;
+				arg.skin.alpha=.3
+				arg.skin.x=arg.width*0.35;
+				arg.skin.y=arg.height*0.35+20;
+				arg.dispatchEvent(new CarEvent(CarEvent.LIGHT,false));
+				TweenMax.to(arg.skin,0.5,{scaleX:1,scaleY:1,x:_x,y:topNum, alpha:1,onComplete:onCarIn,onCompleteParams:[arg]});	
+			}
+			
+			/**动画播放完毕，执行亮灯*/
+			private function onCarIn(arg:CarUi):void{
+				//trace(arg.skin.x);
+				
+				//arg.dispatchEvent(new CarEvent(CarEvent.LIGHT,true));
+			}
+			
+			/**
+			 * 按规则找车位
+			 * @param user:车主的数据模型
+			 * @return 返回寻找到的位置
+			 * */
+			public function findIndex(user:FUserInfor):uint{
+				if(this.numElements==0){
+					return 0;
+				}
+				for(var i:uint=0;i<FUserListManager.getInstance().userEntryVector.length;i++){
+					if(user.m_i64UserID==FUserListManager.getInstance().userEntryVector[i].m_i64UserID){						
+						return i;
+					}
+				}
+				return FUserListManager.getInstance().userEntryVector.length;
+			}
+			
+			/**废弃的方法*/
+			public function findIndex1(user:FUserInfor):uint{
+				var index:uint
+				for(var i:uint=0;i<this.numElements;i++){
+					var _carDef:CarUi=this.getElementAt(i) as CarUi;
+					if(_carDef!=null){
+						//1.价钱排序
+						if(Number(_carDef.userInfor.m_wCarOrder)>Number(user.m_wCarOrder)){
+							index++
+						}else if(Number(_carDef.userInfor.m_wCarOrder)==Number(user.m_wCarOrder)){
+							//2.贵族等级排序
+							if(Number(user.m_iUserNobilityLevel)>0){	
+								
+								if(Number(_carDef.userInfor.m_iUserNobilityLevel)>Number(user.m_iUserNobilityLevel)){
+									index++
+									continue;
+								}else if(Number(_carDef.userInfor.m_iUserNobilityLevel)==Number(user.m_iUserNobilityLevel)){
+									//3.vip等级排序
+									if(Number(user.m_iUserVipLevel)>0){
+										
+										if(Number(_carDef.userInfor.m_iUserVipLevel)>Number(user.m_iUserVipLevel)){
+											index++
+											continue;
+										}else if(Number(_carDef.userInfor.m_iUserVipLevel)==Number(user.m_iUserVipLevel)){
+											//3.时间排序
+											if(Number(user.m_i64UserComeinTime)>=Number(_carDef.userInfor.m_i64UserComeinTime)){
+												index++
+												continue;
+											}else{
+												break
+											}
+											
+											break
+										}									
+									}
+									break
+								}							
+								break
+							}
+						}
+					}					
+				}
+				return index;
+			}
+			
+			/**
+			 * 删除用户车辆数据
+			 * @param user:用户模型
+			 * @return 删除成功返回true，失败返回false
+			 * */
+			public function delCar(user:FUserInfor):Boolean{
+				for(var i:uint=0;i<this.numElements;i++){
+					var _carDef:CarUi=this.getElementAt(i) as CarUi;
+					if(_carDef!=null){
+						if(_carDef.userInfor.m_i64UserID==user.m_i64UserID){							
+							fadeOutStage(_carDef);
+							return true
+						}
+					}
+				}
+				return false;
+			}
+			
+			/**
+			 * 车辆淡出动画
+			 * */
+			private function fadeOutStage(arg:CarUi,index:uint=0):void{				
+				arg.skin.scaleX=arg.skin.scaleY=1;
+				arg.skin.x=arg.skin.y=0;			
+				var dstPoint:Point=new Point(arg.skin.width*.35,arg.skin.height*.35);
+				arg.dispatchEvent(new CarEvent(CarEvent.LIGHT,false));
+				TweenMax.to(arg.skin,0.5,{scaleX:0.3,scaleY:0.3,alpha:0.3,x:dstPoint.x,y:dstPoint.y,onComplete:onMotionFinished,onCompleteParams:[arg]})
+			}
+			
+			/**淡出动画执行完毕，清理垃圾*/
+			private function onMotionFinished(arg:CarUi):void{
+				arg.destroy();
+				this.removeElement(arg);
+			}
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+	</fx:Declarations>	
+</s:TileGroup>

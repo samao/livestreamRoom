@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+
+    ADOBE SYSTEMS INCORPORATED
+    Copyright 2008 Adobe Systems Incorporated
+    All Rights Reserved.
+
+    NOTICE: Adobe permits you to use, modify, and distribute this file
+    in accordance with the terms of the license agreement accompanying it.
+
+-->
+
+<!--- The default skin class for the Spark Button component.  
+
+       @see spark.components.Button
+        
+      @langversion 3.0
+      @playerversion Flash 10
+      @playerversion AIR 1.5
+      @productversion Flex 4
+-->
+<s:SparkButtonSkin xmlns:fx="http://ns.adobe.com/mxml/2009" 
+             xmlns:s="library://ns.adobe.com/flex/spark" 
+             xmlns:fb="http://ns.adobe.com/flashbuilder/2009"
+             minWidth="21" minHeight="21" width="100%" height="100%"
+             alpha.disabled="0.5" xmlns:mx="library://ns.adobe.com/flex/mx" xmlns:ui="com.ui.*">
+     
+    <fx:Metadata>
+        <![CDATA[ 
+        /** 
+         * @copy spark.skins.spark.ApplicationSkin#hostComponent
+         */
+        [HostComponent("spark.components.Button")]
+        ]]>
+    </fx:Metadata>
+    
+    <fx:Script fb:purpose="styling">
+        <![CDATA[         
+			import com.guagua.normal.FAssets;
+			import com.guagua.normal.FUserInfor;
+			import com.ui.CarUi;
+			
+			import flash.display.DisplayObject;
+			import flash.utils.getDefinitionByName;
+			import flash.utils.getQualifiedClassName;
+			
+			import mx.core.UIComponent;
+			import mx.events.FlexEvent;
+			
+			import spark.components.Group;
+			
+            /* Define the skin elements that should not be colorized. 
+            For button, the graphics are colorized but the label is not. */
+            static private const exclusions:Array = ["labelDisplay"];
+            
+            /** 
+             * @private
+             */     
+            override public function get colorizeExclusions():Array {return exclusions;}
+            
+            /**
+             * @private
+             */
+            override protected function initializationComplete():void
+            {
+                useChromeColor = true;
+                super.initializationComplete();		
+				
+            }  
+            
+            /**
+             *  @private
+             */
+            override protected function updateDisplayList(unscaledWidth:Number, unscaledHeight:Number) : void
+            {
+                var cr:Number = getStyle("cornerRadius");
+                
+                if (cornerRadius != cr)
+                {
+                }                
+              
+                super.updateDisplayList(unscaledWidth, unscaledHeight);
+				skin=(this.owner as CarUi).carSkin;		
+				var CarSkinDef:Class=getDefinitionByName(getQualifiedClassName(skin)) as Class;
+				var carSkinDef:DisplayObject=new CarSkinDef();
+				carSkinDef.y=20;
+				carSkin.addChild(carSkinDef);
+				
+				user=(this.owner as CarUi).userInfor;
+				isMe=(this.owner as CarUi).isMe;
+				isLight=(this.owner as CarUi).isLight;
+				
+				this.addEventListener(FlexEvent.STATE_CHANGE_COMPLETE,stateChangedHandler);
+            }
+			
+			/**初始化显示信息*/
+			protected function initGroup():void{
+				FAssets.getInstance().addAssets("Light");				
+				uic.addChild(FAssets.getInstance().getAssets("Light"));	
+				FAssets.getInstance().addAssets("Ef");	
+				ef.addChild(FAssets.getInstance().getAssets("Ef"));
+				
+				FAssets.getInstance().addAssets("UserInforMap");
+				inforBg=FAssets.getInstance().getAssets("UserInforMap");
+			}
+			
+			/**按钮状态变化事件*/
+			protected function stateChangedHandler(event:FlexEvent):void
+			{				
+				inforPanel.startRoll(inforPanel.visible)				
+			}			
+			
+			[Bindable]
+			private var inforBg:DisplayObject;
+            
+			public var light:Sprite;
+			
+			[Bindable]
+			private var isMe:Boolean;
+			
+            private var cornerRadius:Number = 2;
+			
+			[Bindable]
+			private var skin:DisplayObject;			
+			
+			[Bindable]
+			private var user:FUserInfor
+			
+			[Bindable]
+			public var isLight:Boolean                              
+			
+			
+		]]>        
+    </fx:Script>
+        
+    <!-- states -->
+    <s:states>
+        <s:State name="up" />
+        <s:State name="over" />
+        <s:State name="down" />
+        <s:State name="disabled" />
+    </s:states>
+    
+    <!-- layer 1: shadow -->
+    <!--- @private -->
+    <!--<s:Rect id="shadow" left="-1" right="-1" top="-1" bottom="-1" radiusX="2">
+        
+    </s:Rect>-->
+    
+    <!-- layer 2: fill -->
+    <!--- @private -->
+    <!--<s:Rect id="fill" left="1" right="1" top="1" bottom="1" radiusX="2">
+        <s:fill>
+            <s:SolidColor color="#343434" alpha="0.0"/>
+        </s:fill>		
+    </s:Rect>-->
+
+    <!-- layer 3: fill lowlight -->
+    <!--- @private -->
+    <!--<s:Rect id="lowlight" left="1" right="1" top="1" bottom="1" radiusX="2">
+        
+    </s:Rect>-->
+    
+    <!-- layer 4: fill highlight -->
+    <!--- @private -->
+   <!-- <s:Rect id="highlight" left="1" right="1" top="1" bottom="1" radiusX="2">
+       
+    </s:Rect>-->
+    
+    <!-- layer 5: highlight stroke (all states except down) -->
+    <!--- @private -->
+    <!--<s:Rect id="highlightStroke" left="1" right="1" top="1" bottom="1" radiusX="2" excludeFrom="down">
+       
+    </s:Rect>-->
+    
+    <!-- layer 6: highlight stroke (down state only) -->
+    <!--- @private -->
+    <!--<s:Rect id="hldownstroke1" left="1" right="1" top="1" bottom="1" radiusX="2" includeIn="down">
+       
+    </s:Rect>-->
+    <!--- @private -->
+    <!--<s:Rect id="hldownstroke2" left="2" right="2" top="2" bottom="2" radiusX="2" includeIn="down">
+        
+    </s:Rect>-->
+
+    <!-- layer 7: border - put on top of the fill so it doesn't disappear when scale is less than 1 -->
+    <!--- @private -->
+    <!--<s:Rect id="border" left="0" right="0" top="0" bottom="0" width="69" height="20" radiusX="2">
+        
+    </s:Rect>-->
+    
+    <!-- layer 8: text -->
+    <!--- @copy spark.components.supportClasses.ButtonBase#labelDisplay  -->
+   <!-- <s:Label id="labelDisplay"
+             textAlign="center"
+             maxDisplayedLines="1"
+             horizontalCenter="0" verticalCenter="1" verticalAlign="middle"
+             left="10" right="10" top="2" bottom="2">
+    </s:Label>	-->	
+	<s:Group id="gp" creationComplete="initGroup()" width="100%" height="100%">			
+		<!--灯光-->
+		<mx:UIComponent id="uic" visible="{isLight}"/>
+		<!--车辆皮肤-->
+		<mx:UIComponent id="carSkin"  bottom="0" top="0" left="0" right="0">
+			
+		</mx:UIComponent>
+		<!--<s:Image source="{skin}" bottom="0" top="0" left="0" right="0"/>-->
+		<!--自己车辆效果-->
+		<!--<mx:UIComponent id="ef" visible="{isMe}"/>-->
+		<mx:UIComponent id="ef" visible="{false}"/>
+		<!--车主信息面板-->
+		<ui:CarInforPanel id="inforPanel" y="-10" x="-25" user="{user}" inforBg="{this.inforBg}" visible="{this.currentState!='up'}"/>	
+	</s:Group> 	
+	   
+</s:SparkButtonSkin>

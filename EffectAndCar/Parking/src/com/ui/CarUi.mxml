@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Button xmlns:fx="http://ns.adobe.com/mxml/2009"
+		  xmlns:s="library://ns.adobe.com/flex/spark"
+		  xmlns:mx="library://ns.adobe.com/flex/mx"
+		  skinClass="com.skin.CarSkin" buttonMode="false" useHandCursor="false" width="160" height="126" creationComplete="init(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.guagua.events.CarEvent;
+			import com.guagua.events.FAssetsEvent;
+			import com.guagua.normal.CarNode;
+			import com.guagua.normal.ConstVal;
+			import com.guagua.normal.FAssets;
+			import com.guagua.normal.FUserInfor;
+			import com.skin.CarSkin;
+			import com.ui.*;
+			
+			import flash.display.DisplayObject;
+			import flash.display.Sprite;
+			import flash.system.ApplicationDomain;
+			import flash.system.LoaderContext;
+			
+			import mx.core.UIComponent;
+			import mx.events.FlexEvent;
+			
+			[Bindable]
+			public var carSkin:DisplayObject;				
+			
+			private var _userInfor:FUserInfor;
+			
+			/**是否是用户自己*/
+			public var isMe:Boolean;
+			
+			public var isLight:Boolean=false;
+			
+			private var libPath:URLRequest=new URLRequest();
+			private var loader:Loader=new Loader();
+			private var ldr:LoaderContext=new LoaderContext(false,ApplicationDomain.currentDomain);
+			
+			private var baseAssetsTimer:Timer=new Timer(250);
+			
+			[Bindable]
+			public function get userInfor():FUserInfor
+			{
+				return _userInfor;
+			}
+
+			public function set userInfor(value:FUserInfor):void
+			{
+				_userInfor = value;	
+				baseAssetsTimer.addEventListener(TimerEvent.TIMER,baseAssetsHandler);
+				baseAssetsTimer.start();				
+			}
+
+			/**设置皮肤*/
+			public function set texture(arg:DisplayObject):void{				
+				carSkin=arg			
+			}	
+			
+			public function get texture():DisplayObject{
+				return carSkin;
+			}
+			
+			/**清除车辆皮肤，回收垃圾*/
+			public function destroy():void{
+				(this.skin as CarSkin).inforPanel.destroy();
+				this.removeEventListener(CarEvent.LIGHT,lightHandler);
+			}
+			/**初始化，监听亮灯情况*/
+			protected function init(event:FlexEvent):void
+			{
+				this.addEventListener(com.guagua.events.CarEvent.LIGHT,lightHandler);				
+			}
+			/**亮灯处理事件*/
+			protected function lightHandler(event:CarEvent):void
+			{
+				this.isLight=event.isLight;
+				(this.skin as CarSkin).isLight=event.isLight;	
+			}
+			/**加载车辆资源文件*/
+			private function loadCarAssets():void
+			{
+				libPath.url=userInfor.m_szCarResPath;//ConstVal.ASSETS_FLODER+userInfor.m_lCarID+".swf";
+				//trace("libPath.url",libPath.url);
+				if(FAssets.getInstance().getLidMapID(userInfor.m_lCarID)!="0"){
+					//加载过资源了
+					//trace("曾经加载过："+libPath.url,this.hasEventListener(FAssetsEvent.ASSETS_READY));	
+					userInfor.libMap=String(FAssets.getInstance().getLidMapID(userInfor.m_lCarID));
+					this.dispatchEvent(new FAssetsEvent(FAssetsEvent.ASSETS_READY,true));
+					return
+				}						
+				loader.contentLoaderInfo.addEventListener(Event.COMPLETE,complateHandler);
+				loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR,ioHandler);
+				loader.load(libPath,ldr);
+			}
+			
+			protected function complateHandler(event:Event):void
+			{
+				//trace("加载资源成功："+libPath.url);
+				FAssets.getInstance().tagVector.push(new CarNode(userInfor.m_lCarID,event.target.content.libId));				
+				userInfor.libMap=String(event.target.content.libId);
+				this.dispatchEvent(new FAssetsEvent(FAssetsEvent.ASSETS_READY,true));					
+				clearEventHandler()
+			}
+			
+			protected function ioHandler(event:IOErrorEvent):void
+			{
+				//trace(libPath.url," is not exist!");
+				this.dispatchEvent(new FAssetsEvent(FAssetsEvent.ASSETS_READY,false));
+				clearEventHandler()
+			}
+			
+			protected function clearEventHandler():void{
+				loader.contentLoaderInfo.removeEventListener(Event.COMPLETE,complateHandler);
+				loader.contentLoaderInfo.removeEventListener(IOErrorEvent.IO_ERROR,ioHandler);
+			}
+			
+			protected function baseAssetsHandler(event:TimerEvent):void
+			{
+				//trace(FAssets.getInstance().isReady);
+				if(!FAssets.getInstance().isReady){
+					return;
+				}
+				baseAssetsTimer.stop();
+				baseAssetsTimer.removeEventListener(TimerEvent.TIMER,this.baseAssetsHandler);
+				//加载车辆资源
+				loadCarAssets();
+			}
+			
+		]]>
+	</fx:Script>
+	
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+	</fx:Declarations>
+</s:Button>

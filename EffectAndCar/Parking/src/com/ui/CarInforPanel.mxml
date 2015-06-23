@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:BorderContainer xmlns:fx="http://ns.adobe.com/mxml/2009" 
+				   xmlns:s="library://ns.adobe.com/flex/spark" 
+				   xmlns:mx="library://ns.adobe.com/flex/mx"
+				   width="100%" cornerRadius="5" backgroundImage="{this.inforBg}" backgroundImageFillMode="scale" borderAlpha="0.0"  height="100%" xmlns:ui="com.ui.*">
+	
+	<fx:Script>
+		<![CDATA[
+			import com.guagua.normal.FAssets;
+			import com.guagua.normal.FUserInfor;
+			
+			import flash.display.Bitmap;
+			import flash.display.DisplayObject;
+			import flash.system.ApplicationDomain;
+			
+			import mx.events.FlexEvent;
+			
+			import spark.filters.ShaderFilter;
+			/**车主名称*/
+			private var scrollTxt:ScrollTxt;
+			
+			[Bindable]
+			public var user:FUserInfor;
+			
+			[Bindable]
+			public var inforBg:DisplayObject;
+			
+			private var icoArr:Array=["Ford","BMW","Cougar"];			
+			
+			/**初始化填充数据*/
+			protected function createNickUi(event:FlexEvent):void
+			{
+				scrollTxt=new ScrollTxt(new Rectangle(0,0,gp.width,20),1);
+				nickName.addChild(scrollTxt);
+				scrollTxt.y=0;
+				scrollTxt.setText(user.m_szUserName);
+				userId.text=String(user.m_i64UserID);
+				//price.text=String(user.m_fCarPrice);		
+				carType.text=user.m_szCar;
+				img.source=getUserRule();
+				//ico.source=getIco();
+				
+				var icoDef:DisplayObject=getIco();
+				icoDef.width=icoDef.height=40;
+				icoDef.y=5;
+				ico.addChild(icoDef);
+				
+				/* var fliter:Array=userId.filters;				
+				fliter.push(this.glow);
+				userId.filters=fliter; */
+			}
+			
+			/**
+			 * 获取汽车图标
+			 * @return 返回显示皮肤
+			 * */
+			public function getIco():DisplayObject{
+				var arg:String=icoArr[uint(Math.random()*icoArr.length)]
+				FAssets.getInstance().addAssets("I"+user.libMap);				
+				return FAssets.getInstance().getAssets("I"+user.libMap);
+			}			
+			
+			/**
+			 * 获取用户身份图标
+			 * @return 返回图标皮肤
+			 * */
+			public function getUserRule():DisplayObject{
+				//1.判断贵族
+				
+				if(Number(user.m_iUserNobilityLevel)>0){	
+					if(!FAssets.getInstance().hasAssets("Gz_"+user.m_iUserNobilityLevel)){
+						FAssets.getInstance().addAssets("Gz_"+user.m_iUserNobilityLevel);
+					}
+					return FAssets.getInstance().getAssets("Gz_"+user.m_iUserNobilityLevel);
+				}
+				//2.判断vip
+				if(Number(user.m_iUserVipLevel)>0){
+					if(!FAssets.getInstance().hasAssets("Hz_"+user.m_iUserVipLevel)){
+						FAssets.getInstance().addAssets("Hz_"+user.m_iUserVipLevel);
+					}
+					
+					return FAssets.getInstance().getAssets("Hz_"+user.m_iUserVipLevel);
+				}
+				//3.普通用户
+				return new Sprite();
+			}
+			
+			/**清除滚动名称帧听，回收垃圾*/
+			public function destroy():void{
+				scrollTxt.destroy()
+			}
+			
+			/**
+			 * 名称滚动设置
+			 * @param ok:参数是true时为滚动，false为停止滚动
+			 * */
+			public function startRoll(ok:Boolean):void{
+				scrollTxt.startRoll(ok);
+			}	
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+		<!--filters-->
+		<s:GlowFilter id="glow" blurX="2" blurY="2" color="#330066" quality="2" strength="2"/>
+		<s:BlurFilter id="blur" blurX="4" blurY="4" quality="2" />
+		<s:DropShadowFilter id="dropShadow" alpha="0.35" blurX="6" blurY="6" distance="6" color="#000000" angle="90" />
+		<s:BevelFilter id="bevel" angle="45" blurX="0.5" blurY="0.5" distance="4" strength="0.7" highlightAlpha="0.7" shadowAlpha="0.7"  />
+	</fx:Declarations>	
+	
+	<s:VGroup gap="3" width="100%" height="100%" id="vg" paddingLeft="15" paddingRight="15" paddingTop="10" paddingBottom="10" >		
+		<!--图标和车型-->
+		<s:HGroup  height="40%" verticalAlign="middle">	
+			<!--<s:Image id="ico" source="{getIco()}" width="40" height="40"/>-->
+			<mx:UIComponent id="ico" width="40" height="40"/>
+			<s:Label id="carType" color="#000000" fontSize="14" fontWeight="bold" fontFamily="黑体" maxDisplayedLines="1" maxWidth="80"/>				
+		</s:HGroup>	
+		<!--车主昵称-->
+		<s:HGroup height="25%" width="100%" verticalAlign="middle" gap="4">
+			<s:Image id="img" horizontalAlign="left"/>			
+			<s:Label text="车主:" width="25%"/>				
+			<s:Group id="gp" width="50%">				
+				<mx:UIComponent id="nickName" creationComplete="createNickUi(event)"/>				
+			</s:Group>					
+		</s:HGroup>
+		<!--车主id-->
+		<s:HGroup height="25%" verticalAlign="middle" gap="4">
+			<s:Image horizontalAlign="left"/>
+			<s:Label text="ID："/>
+			<s:Label id="userId"/>	
+		</s:HGroup>
+	</s:VGroup>	
+</s:BorderContainer>

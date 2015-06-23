@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Box xmlns:fx="http://ns.adobe.com/mxml/2009"
+		xmlns:s="library://ns.adobe.com/flex/spark"
+		xmlns:mx="library://ns.adobe.com/flex/mx"
+		left="0" right="0" top="0" horizontalScrollPolicy="off" verticalLineScrollSize="100" verticalScrollPolicy="on" verticalScrollBarStyleName="s">		
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		.s {					
+			trackSkin:Embed(source="Assets/sb.jpg",scaleGridLeft="0",scaleGridTop="0",scaleGridRight="1",scaleGridBottom="1");       
+			downArrowSkin: Embed(source="Assets/down.png",scaleGridLeft="0",scaleGridTop="0",scaleGridRight="1",scaleGridBottom="1");
+			upArrowSkin: Embed(source="Assets/up.png",scaleGridLeft="0",scaleGridTop="0",scaleGridRight="1",scaleGridBottom="1");
+			thumbSkin: Embed(source="Assets/thumb.png",scaleGridLeft="0",scaleGridTop="0",scaleGridRight="1",scaleGridBottom="1");
+		}
+	</fx:Style>
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->
+		
+	</fx:Declarations>
+</mx:Box>

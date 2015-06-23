@@ -1,0 +1,353 @@
+package com.guagua.normal
+{
+	import flash.display.DisplayObject;
+	import flash.display.Loader;
+	import flash.display.MovieClip;
+	import flash.display.Sprite;
+	import flash.events.Event;
+	import flash.events.IOErrorEvent;
+	import flash.events.MouseEvent;
+	import flash.events.ProgressEvent;
+	import flash.external.*;
+	import flash.net.URLRequest;
+	import flash.system.ApplicationDomain;
+	import flash.system.LoaderContext;
+	import flash.text.TextField;
+	
+	import gs.*;
+	import gs.easing.*;
+	/**
+	 *@Date:2012-11-1 下午05:42:10	
+	 */
+	
+	public class MainEntry extends Sprite
+	{
+		private var fAssets:FAssets;
+		private var fUserListManager:FUserListManager;
+		
+		private var isVisible:Boolean;
+		
+		private var path:URLRequest=new URLRequest();
+		private var assets:Loader=new Loader();
+		private var assetsReady:Boolean;
+		
+		private var clipBox:Sprite=new Sprite();
+		
+		private var mTxt:TextField=new TextField();
+
+		//停车场按钮
+		private var parkBut:DisplayObject;
+		
+		public function MainEntry()
+		{
+			super();
+			
+			this.addEventListener(Event.ADDED_TO_STAGE,onAdded);
+		}
+		
+		protected function onAdded(event:Event):void
+		{
+			this.removeEventListener(Event.ADDED_TO_STAGE,onAdded);
+			init();
+		}
+		
+		/**初始化MainEntry数据*/
+		private function init():void{
+			mTxt.autoSize="left";
+			
+			fAssets=new FAssets();
+			fUserListManager=new FUserListManager();			
+			
+			if(ExternalInterface.available){				
+				ExternalInterface.addCallback("callFlash",onCall);
+				//ExternalInterface.call("InitializeUser",initializeUser);			
+			}	
+			for(var i:uint=0;i<50;i++){
+				onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100001+i,m_szUserName:"光棍无敌",m_fCarPrice:989898,m_szCar:"奔驰",m_szCarPic:"E2"})
+			}
+			//onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100001,m_szUserName:"光棍无敌",m_fCarPrice:989898,m_szCar:"奔驰",m_szCarPic:"E2"})
+			/*onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100002,m_szUserName:"光棍无敌1",m_fCarPrice:989898,m_szCar:"奔驰2",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100003,m_szUserName:"光棍无敌2",m_fCarPrice:989898,m_szCar:"奔驰2",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100006,m_szUserName:"光棍无敌",m_fCarPrice:989898,m_szCar:"奔驰",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100065,m_szUserName:"光棍无敌1",m_fCarPrice:989898,m_szCar:"奔驰2",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100073,m_szUserName:"光棍无敌2",m_fCarPrice:989898,m_szCar:"奔驰2",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100041,m_szUserName:"光棍无敌",m_fCarPrice:989898,m_szCar:"奔驰",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100032,m_szUserName:"光棍无敌1",m_fCarPrice:989898,m_szCar:"奔驰2",m_szCarPic:"E2"})
+			onCall({m_iFuncID:1005,m_i64UserNobilityLevel:0,m_iUserVipLevel:0,m_i64UserID:100203,m_szUserName:"光棍无敌2",m_fCarPrice:989898,m_szCar:"奔驰2",m_szCarPic:"E2"})*/
+			
+			//trace(fUserListManager.userEntryVector.length)
+			//加载资源
+			loadAssets();
+			
+			this.addChild(clipBox);
+			
+			//initializeUser(100004)
+		}
+		
+		protected function resizeHandler(event:Event):void
+		{
+			parkBut.x=stage.stageWidth-parkBut.width-10;
+		}
+		
+		/**
+		 * 初始化客户端id
+		 * @param id:用户id
+		 * @return 调用成功返回true
+		 * */
+		public function initializeUser(id:Number):Boolean{
+			fUserListManager.client_uid=id;
+			return true;
+		}
+		
+		private function loadAssets():void
+		{
+			path.url=ConstVal.ASSETS_PATH;
+			var ldrContext:LoaderContext=new LoaderContext(false,ApplicationDomain.currentDomain);			
+			assets.contentLoaderInfo.addEventListener(Event.COMPLETE,loadResult);
+			assets.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR,IoHandler);			
+			assets.contentLoaderInfo.addEventListener(ProgressEvent.PROGRESS,progressHandler);
+			mTxt.text="开始加载资源";
+			assets.load(path,ldrContext);
+		}
+		
+		protected function progressHandler(event:ProgressEvent):void
+		{
+			trace("资源加载：",event.bytesLoaded+"/"+event.bytesTotal);			
+		}
+		
+		protected function IoHandler(event:IOErrorEvent):void
+		{
+			trace("未找到资源库")
+			clearEventHandler()		
+			if(ExternalInterface.available){
+				ExternalInterface.call("onFlashError","没加载到资源")
+			}
+		}
+		
+		protected function loadResult(event:Event):void
+		{
+			clearEventHandler()	
+			assetsReady=true
+			//1.build stage
+			buildStage();			
+			//2.add click event
+			stage.addEventListener(MouseEvent.CLICK,clickHandler,true)
+			stage.addEventListener(Event.RESIZE,resizeHandler);
+			//开始进场
+			this.mTxt.text="加载完成"
+			//this.addChild(mTxt);				
+			playCarMovie();							
+		}		
+		
+		protected function clickHandler(event:MouseEvent):void
+		{
+			var tar:*=event.target;
+			if(tar==MovieClip(fAssets.getAssets("DropFlashDef")).getChildByName("bt")){
+				//屏蔽flash登场特效
+				trace("屏蔽登场特效");
+				if(ExternalInterface.available){
+					ExternalInterface.call("dropFlash");
+				}
+				return
+			}
+			
+			if(tar==MovieClip(fAssets.getAssets("ParkBut")).getChildByName("bt")){
+				trace("打开停车场")
+				if (ExternalInterface.available)
+				{
+					//打开停车场
+					ExternalInterface.call("OpenPark");
+				}
+				return
+			}
+		}
+		
+		/**初始化舞台元素*/
+		private function buildStage():void
+		{
+			//尾烟
+			fAssets.addAssets("Hc");				
+			var p:DisplayObject=fAssets.getAssets("Hc");
+			
+			p.x=-10;
+			p.y=stage.stageHeight*.5;
+			p.scaleX=p.scaleY=.5
+			p.visible=false
+			MovieClip(p).stop()
+			this.addChild(p)	
+			
+			//屏蔽按钮
+			fAssets.addAssets("DropFlashDef");
+			var dropFlashBut:DisplayObject=fAssets.getAssets("DropFlashDef");
+			dropFlashBut.visible=false;
+			dropFlashBut.width=40;
+			Object(MovieClip(dropFlashBut).getChildByName("bt")).label="屏蔽";
+			this.addChild(dropFlashBut);
+			
+			//停车场按钮
+			addParkBut();
+		}
+		
+		private function addParkBut():void
+		{
+			fAssets.addAssets("ParkBut");
+			parkBut=fAssets.getAssets("ParkBut") as DisplayObject;
+			parkBut.x=stage.stageWidth-parkBut.width-10;
+			//parkBut.y=(stage.stageHeight-parkBut.height)*.5;
+			//parkBut.visible=false;
+			MovieClip(fAssets.getAssets("ParkBut")).buttonMode=true;
+			this.addChild(parkBut);			
+		}
+		
+		private function playCarMovie():void{			
+			//trace("is",isVisible)
+			//mTxt.text="jj:hasNext"
+			if(fUserListManager.hasNext()){	
+				//mTxt.text="jj:"+ExternalInterface.available
+				parkBut.visible=false;
+				fAssets.getAssets("DropFlashDef").visible=true
+				if(ExternalInterface.available){
+					if(!isVisible){
+						trace("队列中有用户，显示flash")
+						isVisible=true;
+						ExternalInterface.call("showFlash");							
+					}									
+				}				
+				var user:FUserInfor=fUserListManager.getNextUser();					
+				var texture:DisplayObject;				
+				//没找到资源，建立资源压入hashmap
+				//trace(fAssets.hasAssets(user.m_szCarPic))
+				if(!fAssets.hasAssets(user.m_szCarPic)){					
+					fAssets.addAssets(user.m_szCarPic);				
+					texture=fAssets.getAssets(user.m_szCarPic);		
+					fAssets.addAssets(user.m_szCarPic,texture);				
+				}else{
+					texture=fAssets.getAssets(user.m_szCarPic);
+				}
+				
+				//texture.addEventListener(Event.ENTER_FRAME,onFrameHandler);
+				texture.y=stage.stageHeight*.5;
+				texture.x=-texture.width*.5;
+				
+				//mTxt.text="";
+				if(user.m_i64UserID==fUserListManager.client_uid){					
+					mTxt.text="MINE_我的拖拉机来了";
+				}
+				user.texture=texture;
+				//texture.alpha=0;
+				//texture.scaleX=texture.scaleY=0;
+				TweenMax.to(texture,ConstVal.MOVIE_LENGTH/3,{x:texture.width,onComplete:fadeInStage,onCompleteParams:[user,texture]})
+				/*import gs.easing.Strong
+				import gs.easing.Quart
+				import gs.easing.Quint;*/
+				//TweenMax.to(texture,ConstVal.MOVIE_LENGTH,{x:stage.stageWidth+texture.width*.5,ease:Quint.easeInOut,onComplete:onMotionFinished,onCompleteParams:[user]})
+				clipBox.addChild(texture);	
+				this.parkBut.visible=false;
+				return
+			}			
+			trace("队列列表空了，隐藏flash")
+			this.parkBut.visible=true;
+			fAssets.getAssets("DropFlashDef").visible=false;
+			MovieClip(this.parkBut).play();
+			if(ExternalInterface.available){				
+				if(isVisible){
+					isVisible=false;
+					ExternalInterface.call("hideFlash");
+				}				
+			}
+		}
+		
+		private function fadeInStage(arg:FUserInfor,texture:DisplayObject):void{
+			MovieClip(fAssets.getAssets("Hc")).visible=true;
+			MovieClip(fAssets.getAssets("Hc")).gotoAndPlay(2);
+			import gs.easing.Bounce;
+			TweenMax.to(texture,ConstVal.MOVIE_LENGTH*2/3,{x:stage.stageWidth+texture.width*.5,ease:Back.easeInOut,onComplete:onMotionFinished,onCompleteParams:[arg]})
+		}
+		
+		private function onMotionFinished(value:FUserInfor):void{
+			trace("通知C++用户",value.m_szUserName,"进入停车场")
+			//MovieClip(fAssets.getAssets("p_mc")).play()		
+			
+			if(!fUserListManager.isLeave(value.m_i64UserID)){
+				if(ExternalInterface.available){
+					ExternalInterface.call("gotoPark",value.toObject());		
+				}		
+				//从列表移除用户,从进入列表
+				fUserListManager.removeUser(value);
+			}else{
+				//从离开列表移除用户
+				fUserListManager.removeUserFromLeave(value.m_i64UserID);
+			}
+			//mTxt.text=value.szObj			
+			clipBox.removeChild(value.texture);
+			playCarMovie();
+		}		
+		
+		private function clearEventHandler():void{
+			assets.contentLoaderInfo.removeEventListener(Event.COMPLETE,loadResult);
+			assets.contentLoaderInfo.removeEventListener(IOErrorEvent.IO_ERROR,IoHandler);
+			assets.contentLoaderInfo.removeEventListener(ProgressEvent.PROGRESS,progressHandler);
+		}
+		
+		/**
+		 * Flash接口控制
+		 * @param obj:外部容器传进来的数据对象
+		 * @return 调用成功返回 true
+		 * */
+		public function onCall(obj:Object):Boolean
+		{
+			switch(Number(obj[ConstVal.m_iFuncID])){
+				case ConstVal.USER_ENTRY:
+					
+					userEntry(obj);
+					break;
+				case ConstVal.USER_LEAVE:
+					
+					userLeave(obj);
+					break;
+				case ConstVal.USER_LIST:
+					
+					break;
+			}			
+			return true;
+		}
+		
+		/**
+		 * 新用户进入
+		 * @param obj:外部容器传进来的数据对象
+		 * */
+		public function userEntry(obj:Object):void{					
+			var user:FUserInfor=new FUserInfor(obj);							
+			
+			//如果用户在离开列表移入进入列表
+			if(fUserListManager.isLeave(user.m_i64UserID)){
+				trace("用户:",user.m_szUserName,user.m_i64UserID,"从离开列表转移到进入列表")
+				fUserListManager.moveUserToEntryList(user.m_i64UserID);
+			}else{
+				fUserListManager.addUser(user);
+			}				
+			//联调和发布需要打开激活
+			if(!this.isVisible&&assetsReady){
+				this.playCarMovie();
+			}
+		}		
+		
+		/**
+		 * 用户离开
+		 * @param obj:外部容器传进来的数据对象
+		 * */
+		public function userLeave(obj:Object):String{			
+			var user:FUserInfor=fUserListManager.removeUser(new FUserInfor(obj));
+			if(user==null){
+				return "用户不存在"
+			}
+			return fUserListManager.addToLeave(user)
+		}
+		
+		
+		/**渲染舞台*/
+		public function displayStage():void{
+			
+		}
+	}
+}

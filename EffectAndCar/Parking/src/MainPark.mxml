@@ -1,0 +1,545 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx" usePreloader="false"
+			   backgroundColor="#343434" frameRate="12" width="750" height="250"
+			   applicationComplete="init(event)" xmlns:ui="com.ui.*">	
+	<!--<fx:Style source="css.css"/>-->
+	
+	<fx:Style>
+		@namespace s "library://ns.adobe.com/flex/spark";
+		@namespace mx "library://ns.adobe.com/flex/mx";
+		@namespace ui "com.ui.*";
+		s|VGroup,s|Label{
+			content-background-alpha: 0.57;
+			fontFamily:"微软雅黑";			
+			fontSize:12;
+			color:#ffffff;
+		}
+	</fx:Style>
+	
+	<fx:Script>
+		<![CDATA[
+			import com.adobe.serialization.json.JSON;
+			import com.guagua.events.*;
+			import com.guagua.normal.*;
+			import com.ui.*;
+			
+			import flash.display.StageAlign;
+			import flash.display.StageScaleMode;
+			import flash.events.*;
+			import flash.external.ExternalInterface;
+			
+			import mx.controls.Alert;
+			import mx.core.UIComponent;
+			import mx.events.FlexEvent;
+			
+			import net.hires.debug.Stats;
+			
+			import org.osmf.events.TimeEvent;			
+						
+			
+			[Bindable]
+			private var carHeight:Number=126;
+			
+			[Bindable]
+			private var carWidth:Number=160;
+			
+			[Bindable]
+			private var inforBg:DisplayObject;
+			
+			static private const carHGap:uint=50;
+			
+			/**最后一辆比例**/
+			private var counBl:int=5;
+			
+			
+			private var assetsPath:URLRequest=new URLRequest();
+			private var loader:Loader=new Loader();
+			
+			/**资源容器*/
+			[Bindable]
+			private var fAssets:FAssets;
+			/**用户管理*/
+			private var fUserListManager:FUserListManager;			
+			
+			private var uidArr:Array=[];
+			
+			private var assetsReady:Boolean=false;
+			
+			private var debugTxt:TextField=new TextField();
+			
+			/**初始化*/
+			protected function init(event:FlexEvent):void
+			{				
+				fAssets=FAssets.getInstance();
+				fUserListManager=FUserListManager.getInstance();
+				
+				stage.align=StageAlign.TOP_LEFT;
+				stage.scaleMode=StageScaleMode.NO_SCALE;				
+				stage.addEventListener(Event.RESIZE,resizeHandler);	
+				
+				stage.addEventListener(MouseEvent.CLICK,clickHandler,true)
+				
+				 if(ExternalInterface.available){
+					ExternalInterface.addCallback("callFlash",onCall);			
+					ExternalInterface.call("FlashReady","MainPark is on Stage");							 
+					//ExternalInterface.call("FlashReady","MainPark is on Stage");											
+				} 
+				
+				body.width=stage.stageWidth;
+				body.height=stage.stageHeight;
+				this.Bar.width=stage.stageWidth;
+				
+				loadAssets();		
+				//stage.addChild(new net.hires.debug.Stats());				
+				//this.initializeUser(10007)	
+				//initPackBox()	
+				//inout()	
+				
+				trace("v 10");
+				//test();
+			}			
+			
+			
+			/**
+			 * 初始化客户端id
+			 * @param id:用户id
+			 * @return 调用成功返回true
+			 * */
+			public function initializeUser(id:Number):Boolean{
+				fUserListManager.client_uid=id;				
+				return true;
+			}
+			
+			/**
+			 * Flash接口控制
+			 * @param obj:外部容器传进来的数据对象
+			 * @return 调用成功返回 true
+			 * */
+			public function onCall(obj:Object=null):Boolean
+			{		
+				//trace("onCall",JSON.encode(obj));
+				//Alert.show(JSON.encode(obj));
+				//return false;
+				if(obj==null||obj[ConstVal.m_iFuncID]==null){
+					return false;
+				}
+				
+				switch(Number(obj[ConstVal.m_iFuncID])){
+					//初始化用户自己
+					case ConstVal.CLIENT_ENTRY:
+						try{
+							this.initializeUser(obj[ConstVal.m_i64UserID]);
+						}catch(e:Error){
+							if(ExternalInterface.available){
+								ExternalInterface.call("onFlashError","自己无属性");
+							}
+						}
+						
+						break;		
+					//用户进入
+					case ConstVal.USER_ENTRY:								
+						userEntry(obj);
+						break;
+					//用户离开
+					case ConstVal.USER_LEAVE:		
+						if(!this.fUserListManager.hasNext()){
+							return false;
+						}
+						userLeave(obj);
+						break;
+					//已经存在的用户列表
+					case ConstVal.USER_LIST:
+						//userList(obj);
+						break;
+				}			
+				return true;
+			}
+			
+			/**加载基础资源库*/
+			private function loadAssets():void
+			{
+				assetsPath.url=ConstVal.ASSETS_PATH;
+				loader.contentLoaderInfo.addEventListener(Event.COMPLETE,assetsReadyHandler);
+				loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR,ioErrorHandler);
+				
+				var ldr:LoaderContext=new LoaderContext(false,ApplicationDomain.currentDomain);
+				loader.load(assetsPath,ldr);
+			}
+			
+			/**未找到资源事件*/
+			protected function ioErrorHandler(event:IOErrorEvent):void
+			{
+				if(ExternalInterface.available){
+					ExternalInterface.call("onFlashError","没加载到资源")
+				}
+				//load again				
+			}		
+			
+			/** 资源加载完毕事件  * */
+			protected function assetsReadyHandler(event:Event):void
+			{	
+				trace("[MainPark assetsReadyHandler] 资源加载完毕");
+				assetsReady=true;
+				fAssets.isReady=true;
+				//信息面板背景
+				fAssets.addAssets("UserInforMap")				
+				inforBg=fAssets.getAssets("UserInforMap")
+				//贵族资源
+				fAssets.addAssets("Gz");				
+				//红钻资源					
+				fAssets.addAssets("Hz");
+				
+				//1.清楚加载帧听
+				clearEventListener();
+				//2.建立模型
+				buildUi();
+				//this.stage.addChild(debugTxt);
+				//3.初始化舞台按钮
+				initStageButtom();
+			}
+			
+			/**清除资源加载事件监听*/
+			private function clearEventListener():void
+			{
+				loader.contentLoaderInfo.removeEventListener(Event.COMPLETE,assetsReadyHandler);
+				loader.contentLoaderInfo.removeEventListener(IOErrorEvent.IO_ERROR,ioErrorHandler);
+			}
+			
+			/**自适应分辨率处理*/
+			protected function resizeHandler(event:Event):void
+			{	
+				body.width=stage.stageWidth;
+				body.height=stage.stageHeight;
+				this.Bar.width=hBox.width;
+				//requestedColumnCount="{Math.floor(hBox.width/(carHGap+carWidth))}
+				trace("resizeHandler",packBox.width,body.width,hBox.width,carHGap+carWidth,packBox.requestedColumnCount,Math.floor(hBox.width/(carHGap+carWidth)),packBox.x);
+			}						
+			
+			//-----------------调试信息
+			private var assetsArr:Array=["13822","13823"]
+			private var carArr:Array=["mini cooper","CLS63 AMG","ONE-77","奥迪Q5"];
+			private function initPackBox():void
+			{						
+				
+				for(var i:uint=0;i<1;i++){
+					var user:FUserInfor=new FUserInfor({m_iFuncID:"1005",
+						m_szUserNobilityPic:"",m_szUserVipPic:"",m_i64UserID:10000000000000,m_szUserName:"名字太长只能滚了___名字太长只能滚了"+i,
+						m_lCarID:assetsArr[i%9],m_wCarOrder:Math.abs(1000-2*i),m_szCar:carArr[i%4],m_iUserVipLevel:0,m_i64UserNobilityLevel:0,
+						m_i64UserComeinTime:uint(Math.random()*100)})						
+					fUserListManager.addUser(user);					
+					uidArr.push(user.m_i64UserID);		
+					user.toObject();
+				}	
+				var t:uint=getTimer();
+				//buildUi()
+				trace("渲染",i,"车辆，耗时",getTimer()-t,"ms");
+				
+			}		
+			//----------------
+			
+			/**一次性初始化界面*/
+			private function buildUi():void{
+				var index:uint=0;
+				var car:CarUi
+				for each(var i:FUserInfor in fUserListManager.userEntryVector){					
+					car=new CarUi();					
+					car.addEventListener(FAssetsEvent.ASSETS_READY,carAssetsReadyHandler);
+					car.userInfor=i;
+					/* car.isMe=(i.m_i64UserID==fUserListManager.client_uid)						
+					if(!fAssets.hasAssets("P"+i.libMap)){
+						fAssets.addAssets("P"+i.libMap);
+					}	
+					trace("yonghu lib ",i.libMap)
+					car.texture=fAssets.getAssets("P"+i.libMap)	
+					//var radio:Number=car.texture.width/this.carWidth
+					
+					packBox.insertCar(car);					 */
+				}				
+			}			
+			
+			/**鼠标滑入滑出按钮效果*/
+			protected function overHandler(event:MouseEvent):void
+			{				
+				var tar:MovieClip=event.currentTarget as MovieClip;					
+				if(tar!=null){					
+					switch(event.type){
+						case MouseEvent.MOUSE_OVER:	
+							tar.gotoAndStop(2)
+							break;
+						case MouseEvent.MOUSE_OUT:
+							if(tar is MovieClip){
+								tar.gotoAndStop(1)
+							}
+							break;
+					}
+				}
+			}	
+			
+			/**
+			 * 用户进入
+			 * @param obj:客户端传进来的用户信息序列
+			 * */
+			private var num:uint=0;
+			private function userEntry(obj:Object):void
+			{
+				//打印debug信息
+				//debugTxt.autoSize="left"
+				//debugTxt.mouseEnabled=false;
+				debugTxt.width=300;
+				debugTxt.textColor=0x00000
+				debugTxt.x=100;
+				//debugTxt.appendText(JSON.encode(obj)+"\n");
+				
+				var user:FUserInfor=new FUserInfor(obj);		
+				if(fUserListManager.hasUser(user)){
+					return		
+				}
+				
+			//	if(assetsReady){
+					//更新显示
+					var car:CarUi=new CarUi();
+					car.addEventListener(FAssetsEvent.ASSETS_READY,carAssetsReadyHandler);
+					car.userInfor=user;								
+					/* if(!fAssets.hasAssets("P"+user.m_lCarID)){						
+						fAssets.addAssets("P"+user.m_lCarID);
+					}		
+					
+					car.isMe=(obj.m_i64UserID==fUserListManager.client_uid)
+					car.texture=fAssets.getAssets("P"+user.m_lCarID);							
+					packBox.insertCar(car); */
+			//	}	
+				//debugTxt.appendText(fUserListManager.userEntryVector.length+"\n");
+				/* for each(var i:FUserInfor in fUserListManager.userEntryVector){
+					debugTxt.appendText(com.adobe.serialization.json.JSON.encode({na:i.m_szUserName,o:i.m_wCarOrder,n:i.m_iUserNobilityLevel,v:i.m_iUserVipLevel,
+					car:i.m_lCarID,uid:i.m_i64UserID,Time:i.m_i64UserComeinTime})+"\n")
+				}   */
+			}
+			
+			/**
+			 * 用户离开
+			 * @param obj:客户端传进来的用户序列化信息
+			 * @return 执行结果串
+			 * */
+			private function userLeave(obj:Object):String
+			{				
+				var user:FUserInfor=fUserListManager.removeUser(new FUserInfor(obj));				
+				if(user==null){
+					return "用户不存在"
+				}					
+				//更新显示删除模型
+				packBox.delCar(user);
+				return "离开成功"
+			}
+			
+			/**
+			 * 初始化时候已经在车场上面的用户
+			 * @param obj：通讯数据，obj.t=1038，obj.list是用户列表数据结构，每个元素是一个object
+			 * 
+			 * */
+			private function userList(obj:Object):void
+			{
+				var isError:Boolean;
+				
+				var userList:Array=obj.list;
+				
+				for each(var i:Object in userList){
+					var user:FUserInfor=new FUserInfor(i);
+					if(fUserListManager.hasUser(user)){
+						isError=true	;
+						continue;
+					}
+					fUserListManager.addUser(user);
+				}
+				
+				//更新显示
+				buildUi()
+				
+				if(isError)trace("1038添加用户中发生了错误")
+			}			
+					
+			/**按钮点击事件*/
+			protected function clickHandler(event:MouseEvent):void
+			{
+				var tar:*=event.target;	
+				
+				if(tar!=null){
+					//trace(tar==fAssets.getAssets("back"));
+					if(tar==fAssets.getAssets("shop")){
+						trace("去商城")
+						doExternalInterface("doShop")
+						return 
+					}
+					if(tar==fAssets.getAssets("back")){	
+						trace("返回")
+						doExternalInterface("doBack")
+						return 
+					}
+				}
+				
+			}	
+			
+			/**
+			 * 统一按钮接口
+			 * @param arg:接口名称
+			 * */
+			private function doExternalInterface(arg:String):void{
+				if(ExternalInterface.available){
+					ExternalInterface.call(arg);
+				}
+			}
+			
+			//************测试车辆进出
+			private var count:uint;	
+			private var timer:Timer;
+			private function inout():void{
+				timer=new Timer(200);
+				timer.addEventListener(TimerEvent.TIMER,timerHandler);
+				
+				timer.start();
+			}			
+			
+			protected function timerHandler(event:TimerEvent):void
+			{
+				//trace("Start")
+				var type:String="1005";
+				var id:uint		
+				var hz:Number=0;
+				var gz:Number=0;
+				if(count>=1){
+					timer.stop()
+					return
+				}
+				for(var i:uint=0;i<2;i++){
+				if(count%2==0){					
+					//type="1006"
+					id=1989800+(count)//uidArr.splice(Math.floor(Math.random()*uidArr.length),1)[0]
+					hz=uint(Math.random()*(2013-2005))+2005;
+				}else{
+					id=989800+(count)
+					uidArr.push(id)					
+					gz=uint(Math.random()*(2078-2064))+2064;					
+				}		
+				count++
+				onCall({m_iFuncID:type,m_i64UserID:id,m_szUserNobilityPic:"",m_szUserVipPic:"",m_szUserName:"苦力瓦力"+count,
+					m_lCarID:assetsArr[count%2],m_wCarOrder:Math.floor(Math.random()*10+500),m_szCar:carArr[count%4],m_iUserVipLevel:hz,m_iUserNobilityLevel:gz,
+					m_i64UserComeinTime:uint(Math.random()*100)})
+				}
+			}				
+			//**********
+			
+			/**创建舞台按钮元素*/
+			private function initStageButtom():void
+			{
+				fAssets.addAssets("back")
+				fAssets.addAssets("shop");
+				var b:DisplayObject=fAssets.getAssets("back")
+				var s:DisplayObject=fAssets.getAssets("shop");
+				
+				MovieClip(b).buttonMode=MovieClip(s).buttonMode=MovieClip(b).mouseChildren=MovieClip(s).mouseChildren=true;
+				
+				MovieClip(b).addEventListener(MouseEvent.MOUSE_OVER,this.overHandler);
+				MovieClip(b).addEventListener(MouseEvent.MOUSE_OUT,this.overHandler);
+				
+				MovieClip(s).addEventListener(MouseEvent.MOUSE_OVER,this.overHandler);
+				MovieClip(s).addEventListener(MouseEvent.MOUSE_OUT,this.overHandler);
+				
+				doShop.addChild(s);
+				doBack.addChild(b);
+			}
+			
+			/**资源加载完毕显示车辆信息*/
+			protected function carAssetsReadyHandler(event:FAssetsEvent):void
+			{			
+				event.currentTarget.removeEventListener(FAssetsEvent.ASSETS_READY,carAssetsReadyHandler);
+				var car:CarUi=event.currentTarget as CarUi;
+				var user:FUserInfor=car.userInfor;
+				if(event.isReady){
+					//资源加载成功
+				}else{
+					//trace("资源加载失败！")
+				}
+				
+				//trace("资源加载结果：",event.isReady)
+				if(!fAssets.hasAssets("P"+user.libMap)){						
+					fAssets.addAssets("P"+user.libMap);
+				}	
+				
+				//trace("资源加载成功！")
+				car.isMe=(user.m_i64UserID==fUserListManager.client_uid)
+				car.texture=fAssets.getAssets("P"+user.libMap);	
+				
+				//延后插入用户，方便显示列表找位置
+				fUserListManager.addUser(user);
+				packBox.insertCar(car);	
+				//trace(car.width);
+			}
+			
+			
+			/**测试**/
+			private function test():void{
+				var obj1:Object={"m_iFuncID":1005,"m_szUserVip":"","m_iUserVipLevel":2009,"m_wCarOrder":0,"m_szCar":"","m_lCarID":13068,"m_i64UserID":5092733,"m_szInserInfo":"","m_szUserName":"【心灵相系】天意","m_i64UserComeinTime":1365486832683,"m_szUserNobility":"","m_szCarResPath":"cat/13823.swf","m_iUserNobilityLevel":0};
+				var obj2:Object={"m_iFuncID":1005,"m_szUserVip":"","m_iUserVipLevel":2010,"m_wCarOrder":0,"m_szCar":"","m_lCarID":13500,"m_i64UserID":56317,"m_szInserInfo":"","m_szUserName":"穷小子","m_i64UserComeinTime":1365458921433,"m_szUserNobility":"公爵","m_szCarResPath":"cat/13505_8.swf","m_iUserNobilityLevel":2076};
+				var obj3:Object={"m_iFuncID":1005,"m_szUserVip":"","m_iUserVipLevel":2008,"m_wCarOrder":0,"m_szCar":"","m_lCarID":13500,"m_i64UserID":282666,"m_szInserInfo":"","m_szUserName":"〓苍穹☆ＵＵ〓↑","m_i64UserComeinTime":1365486445121,"m_szUserNobility":"伯爵","m_szCarResPath":"cat/13504_8.swf","m_iUserNobilityLevel":2070};
+				
+				var obj4:Object={"m_iFuncID":1005,"m_szUserVip":"","m_iUserVipLevel":1019,"m_wCarOrder":0,"m_szCar":"","m_lCarID":13068,"m_i64UserID":5092633,"m_szInserInfo":"","m_szUserName":"【心灵相系】天意","m_i64UserComeinTime":1365486832683,"m_szUserNobility":"","m_szCarResPath":"cat/13823.swf","m_iUserNobilityLevel":0};
+				var obj5:Object={"m_iFuncID":1005,"m_szUserVip":"","m_iUserVipLevel":1020,"m_wCarOrder":0,"m_szCar":"","m_lCarID":13500,"m_i64UserID":56347,"m_szInserInfo":"","m_szUserName":"穷小子","m_i64UserComeinTime":1365458921433,"m_szUserNobility":"公爵","m_szCarResPath":"","m_iUserNobilityLevel":2076};
+				var obj6:Object={"m_iFuncID":1005,"m_szUserVip":"","m_iUserVipLevel":1028,"m_wCarOrder":0,"m_szCar":"","m_lCarID":13500,"m_i64UserID":282676,"m_szInserInfo":"","m_szUserName":"〓苍穹☆ＵＵ〓↑","m_i64UserComeinTime":1365486445121,"m_szUserNobility":"伯爵","m_szCarResPath":"cat/13823.swf","m_iUserNobilityLevel":2070};
+				
+				onCall(obj1);
+				onCall(obj2);
+				onCall(obj3);
+				
+				onCall(obj4);
+				onCall(obj5);
+				onCall(obj6);
+			}
+			/**返回列数**/
+			private function returnCount():int{
+				var c:int=Math.floor(hBox.width/(carHGap+carWidth));
+				var m:Number=hBox.width%(carHGap+carWidth);
+				if(m!=0){
+					if(m/(carHGap+carWidth)>(2/3)){
+						c++;
+					}
+				}
+				trace("returnCount",c,hBox.width);
+				return c;
+			}
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- 将非可视元素（例如服务、值对象）放在此处 -->			
+	</fx:Declarations>
+	<s:layout>
+		<s:VerticalLayout horizontalAlign="left" verticalAlign="top"/>
+	</s:layout>
+
+	<mx:VBox id="body" width="100%" height="100%" top="1" bottom="1" horizontalGap="0">				
+		<s:Group width="100%" height="100%">	
+			<s:Button width="100%" height="100%" alpha="1" useHandCursor="false" visible="false"/>
+			<!--上下滑动条容器-->
+			<ui:ScrollBox id="hBox" width="{body.width}" height="{body.height}" top="0">				
+				<s:Group width="100%" height="100%">
+					<!--停车场背景-->
+					<s:Image source="@Embed(source='Assets/停车场1.jpg')" fillMode="repeat" width="100%" height="100%"/>
+					<!--停车场车辆容器-->
+					<s:Group horizontalCenter="0">
+						<!--<ui:ParkGroup id="packBox" columnWidth="210" horizontalGap="0" verticalGap="0" requestedColumnCount="{Math.floor(hBox.width/(carHGap+carWidth))}"/>-->
+						<ui:ParkGroup id="packBox" x="{210*Math.floor((hBox.width+(carHGap+carWidth)/5)/(carHGap+carWidth))-hBox.width>0?0:210*Math.floor((hBox.width+(carHGap+carWidth)/5)/(carHGap+carWidth))-hBox.width+10}"  columnWidth="210" horizontalGap="0" verticalGap="0" requestedColumnCount="{Math.floor((hBox.width+(carHGap+carWidth)/5)/(carHGap+carWidth))}"/>
+						<!--<ui:ParkGroup id="packBox" x="{210*Math.floor(hBox.width/(carHGap+carWidth))-hBox.width>0?0:210*Math.floor(hBox.width/(carHGap+carWidth))-hBox.width+10}"  columnWidth="210" horizontalGap="0" verticalGap="0" requestedColumnCount="{Math.floor(hBox.width/(carHGap+carWidth))}"/>-->
+					</s:Group>									
+				</s:Group>								
+			</ui:ScrollBox>
+			
+			<!--按钮容器-->
+			<s:Group id="Bar" width="{body.width}" height="35">				
+				<mx:UIComponent id="doShop" left="20"/>
+				<mx:UIComponent id="doBack" right="57"/>
+			</s:Group>
+				
+		</s:Group>				
+	</mx:VBox>	
+</s:Application>

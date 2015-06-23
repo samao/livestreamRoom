@@ -1,0 +1,980 @@
+package ui 
+{
+	import chat.events.FmsEvent;
+	import chat.model.FmsManager;
+	import chat.model.FmsModel;
+	import chat.model.room.RoomModel;
+	import chat.model.UserInfo;
+	import chat.net.handler.room.RoomCmdHandler;
+	import com.adobe.serialization.json.JSON;
+	import com.greensock.easing.Cubic;
+	import com.greensock.events.TweenEvent;
+	import com.greensock.TweenMax;
+	import filters.FiltersOperation;
+	import flash.display.DisplayObject;
+	import flash.display.MovieClip;
+	import flash.display.Shape;
+	import flash.display.SimpleButton;
+	import flash.display.Sprite;
+	import flash.events.AsyncErrorEvent;
+	import flash.events.Event;
+	import flash.events.MouseEvent;
+	import flash.events.NetStatusEvent;
+	import flash.events.TimerEvent;
+	import flash.external.ExternalInterface;
+	import flash.filters.ColorMatrixFilter;
+	import flash.geom.Matrix;
+	import flash.geom.Point;
+	import flash.media.SoundTransform;
+	import flash.media.Video;
+	import flash.net.NetConnection;
+	import flash.net.NetStream;
+	import flash.net.URLRequest;
+	import flash.text.TextField;
+	import flash.utils.Timer;
+	import ui.events.UIEvent;
+	import ui.FlowerDef;
+	import utils.ConstVal;
+	import utils.FlowerStatus;
+	
+	/**
+	 * ...
+	 * @author idzeir
+	 */
+	public class VideoView extends Sprite 
+	{
+		/**麦上用户*/
+		private var _user:UserInfo;
+		/**麦序*/
+		private var _micIndex:uint;
+		/**麦上人名*/
+		private var userNameTxt:TextField;
+		/**视频*/
+		private var videoDef:Video;		
+		/**控制条*/
+		private var controlBar:UIVideoControl;
+		
+		private var netConn:NetConnection = new NetConnection();
+		/**视频流*/
+		private var videoStream:NetStream;
+		/**音频流*/
+		private var audioStream:NetStream;
+		/**FMS服务器ip*/
+		private var serverIp:String = "";
+		/**FMS服务器端口*/
+		private var serverPort:String = "";
+		/**FMS服务器列表管理器*/
+		private var fmsManager:FmsManager;
+		
+		private var FmsInvalid:Boolean = false;
+		
+		/**音频音量*/
+		private var soundVolume:SoundTransform;
+		
+		//ui
+		private var nameDefSp:MovieClip;
+		private var videoMaskDef:Shape;		
+		private var starLevelDef:StarLevelDef;
+		private var zoneDef:UserCenter;
+		private var loadingDef:VloadIng;
+		private var goodsDef:SimpleButton;
+		private var flowerDef:FlowerDef;
+		private var videoBackgroundBut:MovieClip;
+		private var micStatusDef:MicStatusDef;
+		private var flowerTxtContainer:Sprite;	
+		private var returnNormal:TextField;
+		private var onMicDef:OnMicDef;
+		private var weChatDef:WeChat;
+		
+		/**送出花的数量*/
+		private var sendFlowerCount:uint = 0;
+		
+		
+		/**请求fms列表计时*/
+		private var timer:Timer = new Timer(250);
+		
+		/**buffer empty 5秒计时器，超过时间切换ip*/
+		private var bufferTimer:Timer = new Timer(6000);
+		
+		/**bufferlength 异常容错，超过buffertime四倍切换ip*/
+		private var bufferLengthChecker:Timer = new Timer(1000);
+		
+		/**audio状态监测*/
+		private var audioTimer:Timer = new Timer(1000);
+		
+		/**鲜花数量文本*/
+		private var flowerText:TextField;
+		/**星星转向*/
+		private var ran_dag:Number = 0;		
+		/**飞向鲜花总数的花朵*/
+		private var flyFlowerDef:FlyFlowerDef;		
+		/**鲜花数量*/
+		private var _flowerCount:uint = 0;
+		/**礼物按钮原始位置*/
+		private var goodPoint:Point;
+		
+		private var bspObject:Object = { };
+		
+		public var bspIsOk:Boolean = false;
+		
+		public var streamInCome:Boolean = false;
+		
+		private var _myFlowerCount:uint = 0;
+		
+		
+		public function VideoView() 
+		{
+			//trace(VideoPlayer)
+			this.addEventListener(Event.ADDED_TO_STAGE, onAddedStage);
+		}		
+		
+		private function onAddedStage(e:Event):void 
+		{
+			removeEventListener(Event.ADDED_TO_STAGE, onAddedStage);
+			
+			//ui初始化
+			nameDefSp = this.getChildByName("nameDef") as MovieClip;
+			
+			userNameTxt = nameDefSp.getChildByName("nameTxt") as TextField;
+			userNameTxt.text = "";
+			
+			videoDef = this.getChildByName("_video") as Video;				
+			controlBar = this.getChildByName("videoContorlBar") as UIVideoControl;
+			starLevelDef = nameDefSp.getChildByName("star") as StarLevelDef;
+			zoneDef = this.getChildByName("zone") as UserCenter;
+			loadingDef = this.getChildByName("loading") as VloadIng;
+			flowerDef = this.getChildByName("xhuaBtn") as FlowerDef;
+			goodsDef = this.getChildByName("goodsBtn") as SimpleButton;
+			videoBackgroundBut = this.getChildByName("videoBut") as MovieClip;
+			micStatusDef = this.getChildByName("micStatus") as MicStatusDef;			
+			
+			flowerTxtContainer = this["TotalFlower"];
+			flowerText = this["TotalFlower"]["flowerTxt"];
+			
+			returnNormal = this["txt"];
+			returnNormal.visible = false;
+			
+			onMicDef = this["onMic"];
+			weChatDef = this["chatBut"];
+			
+			
+			goodPoint = new Point(goodsDef.x, goodsDef.y);
+			
+			//默认不显示献花
+			roomStateChange(0);
+			
+			initEventMap();
+			
+			//视频遮罩，屏蔽黑边
+			videoMaskDef = createMaskDef();
+			this.addChild(videoMaskDef);
+			videoDef.mask = videoMaskDef
+			
+			fmsManager = FmsManager.getInstance();
+			
+			soundVolume = new SoundTransform();
+			
+			hideAll();
+		}
+		
+		/**房间状态改变以后调整界面*/
+		public function roomStateChange(value:Number):void {
+			switch (value) {
+				case 0:
+					flowerTxtContainer.visible = false;
+					flowerDef.visible = false;
+					goodsDef.x = flowerDef.x;
+					goodsDef.y = flowerDef.y;
+				break;
+				default:
+					if (bspObject.m_lStarLevel > 0) {
+						flowerTxtContainer.visible = true;
+						flowerDef.visible = true;
+						goodsDef.x = goodPoint.x;
+						goodsDef.y = goodPoint.y;
+					}
+					
+				break
+			}
+		}
+		
+		/**初始化事件*/
+		private function initEventMap():void 
+		{				
+			zoneDef.buttonMode = true;
+			controlBar.visible = false;
+			videoDef.smoothing = true;
+			
+			//onMicDef.mouseEnabled = weChatDef.mouseEnabled = false;
+			
+			this.addEventListener(MouseEvent.MOUSE_OVER, overHandler);
+			this.addEventListener(MouseEvent.MOUSE_OUT, overHandler);			
+			
+			controlBar.addEventListener(UIEvent.UI_CHANGED, uiChangedHandler);
+			controlBar.addEventListener(MouseEvent.MOUSE_OVER, overHandler);
+			controlBar.addEventListener(MouseEvent.MOUSE_OUT, overHandler);
+			
+			this.addEventListener(MouseEvent.CLICK, clickHandler);
+			zoneDef.addEventListener(MouseEvent.CLICK, gotoZoneHandler);
+			
+			micStatusDef.addEventListener(MouseEvent.MOUSE_OVER, micOverHandler);
+			micStatusDef.addEventListener(MouseEvent.MOUSE_OUT, micOverHandler);
+			
+			flowerDef.addEventListener(MouseEvent.CLICK, sendFlowersHandler);
+			
+			bufferTimer.addEventListener(TimerEvent.TIMER, bufferTimerHandler);
+			bufferLengthChecker.addEventListener(TimerEvent.TIMER, bufferLengthHandler);
+		}
+		
+		private function sendFlowersHandler(e:MouseEvent):void 
+		{
+			sendFlowers();
+		}
+		
+		/**买状态鼠标滑动状态*/
+		private function micOverHandler(e:MouseEvent):void 
+		{
+			switch(e.type) {
+				case MouseEvent.MOUSE_OVER:
+					
+					RoomModel.getRoomModel().iPlayer.tipsTool((!micStatusDef.open)?"暂未发言":"正在发言",this.micStatusDef);								
+					break;
+				case MouseEvent.MOUSE_OUT:
+							
+					RoomModel.getRoomModel().iPlayer.tipsTool("",this.micStatusDef);
+					break;					
+			}
+		}
+		
+		/**容错服务器bufferlength异常*/
+		/*private function bufferLengthHandler1(e:TimerEvent):void 
+		{
+			if (!streamInCome) {
+				streamInCome = ((videoStream!=null&&(videoStream.info.byteCount)>0));
+			}			
+			Log.out("麦",micIndex,"videoStream",videoStream.info.videoBufferLength,videoStream.bufferTime)
+			if (bufferLengthChecker.currentCount>=15&&!this.streamInCome||videoStream != null && videoStream.info.videoBufferLength > videoStream.bufferTime * 10) {				
+				bufferLengthChecker.reset();
+				bufferLengthChecker.stop();
+				
+				Log.out(micIndex,"麦","异常BUFFER_Length:", videoStream.info.videoBufferLength,"hasStreamComing:",streamInCome)
+				
+				fmsManager.getFms().lag *= fmsManager.status == FmsEvent.FMS_GETTING?1:ConstVal.LAG_RATIO;			
+					
+				retry();
+			}
+		}*/
+		
+		//private var bufferError:Array = [];
+		/**容错服务器bufferlength异常*/
+		private function bufferLengthHandler(e:TimerEvent):void 
+		{
+			if (videoStream == null) {
+				return;
+			}
+			
+			if (!streamInCome) {
+				streamInCome = ((videoStream!=null&&(videoStream.info.byteCount)>0));
+			}				
+			
+			/*if (videoStream != null && bufferLengthChecker.currentCount % 10 == 0) {
+				if (bufferError.length > 0) {
+					Log.out(micIndex, "@麦", "异常次数", bufferError.length);
+					for each(var i:Object in bufferError) {
+						Log.out(JSON.encode(i));
+					}
+					Log.out("--------end");
+					bufferError = [];
+				}				
+			}
+			
+			if (videoStream!=null&&videoStream.info.videoBufferLength>10*videoStream.bufferTime) {
+				bufferError.push({"bufferLength":videoStream.info.videoBufferLength.toFixed(2),"Fps":videoStream.currentFPS.toFixed(2),"perBytes":Number(videoStream.info.videoBytesPerSecond/1024).toFixed(2)});
+			}*/
+			
+			
+			if (bufferLengthChecker.currentCount>=15&&!this.streamInCome) {				
+				bufferLengthChecker.reset();
+				bufferLengthChecker.stop();
+				
+				Log.out(micIndex,"麦","异常BUFFER_Length:", videoStream.info.videoBufferLength,"hasStreamComing:",streamInCome)
+				
+				fmsManager.getFms().lag *= fmsManager.status == FmsEvent.FMS_GETTING?1:ConstVal.LAG_RATIO;			
+					
+				retry();
+			}
+		}
+		
+		private function bufferTimerHandler(e:TimerEvent):void 
+		{
+			/*//如果数据回来30%buffer停止计时器
+			if ((videoStream.info.videoBufferLength/videoStream.bufferTime) > 0.3) {
+				if (bufferTimer.running) {
+					Log.out("如果数据回来30%buffer停止计时器");
+					bufferTimer.stop();
+				}	
+			}*/			
+			
+			Log.out(micIndex, "麦：长时间buffer为空，切换fms");
+			fmsManager.getFms().lag *= fmsManager.status == FmsEvent.FMS_GETTING?1:ConstVal.LAG_RATIO;	
+			bufferTimer.stop();
+			OnDisconnect();
+		}
+		
+		/**跳转到个人空间*/
+		private function gotoZoneHandler(e:MouseEvent):void 
+		{		
+			if (user == null) {
+				return;
+			}	
+			Log.out(micIndex,"麦","用户中心；",user.name)
+			if(ExternalInterface.available){
+				ExternalInterface.call("gotoZone",user.getJsObj());
+			}
+		}
+		
+		private function clickHandler(e:MouseEvent):void 
+		{				
+			switch(e.target) {
+				case videoBackgroundBut:					
+					choiceById();	
+					break
+				case goodsDef:
+					controlBar.dispatchEvent(new UIEvent(UIEvent.UI_CHANGED, ConstVal.GIFT));
+					break;
+				case returnNormal:
+					controlBar.dispatchEvent(new Event("openAll"));
+					break;
+			}
+							
+		}
+		
+		/**和明星聊天*/
+		public function chatWithStar():void {
+			if (user != null) {
+				Log.out("私聊明星:",user.uid, user.name);
+				if (ExternalInterface.available) {
+					ExternalInterface.call("pushFlashPri", user.uid, user.name,user.m_i64EquipState);
+				}
+			}
+		}
+		
+		public function showAllOpen(value:Boolean = false):void {
+			returnNormal.visible = value;
+		}
+		
+		/**用户上麦以后请求bsp鲜花总数以后的回调*/
+		public function flowerBackCall(value:Object):void {
+			Log.out("明星鲜花数量：", micIndex, "总数",value.m_i64TotalFlower,"当天",value.m_i64CountFlower);
+			
+			bspObject = value;
+			
+			_flowerCount += value.m_i64TotalFlower;
+			
+			flowerText.text = "" + value.m_i64TotalFlower;
+			
+			this.bspIsOk = true;
+			
+			roomStateChange(10);
+		}
+		
+		/**视频控制集合*/
+		private function uiChangedHandler(e:UIEvent):void 
+		{
+			switch(e.cmd) {
+				case ConstVal.GIFT:
+					sendGoods();
+					break;
+				case ConstVal.FLOWER:
+					sendFlowers();
+					break;
+				case ConstVal.CLOSE_VIDEO:
+					videoDef.visible = false;
+					break;
+				case ConstVal.OPEN_VIDEO:
+					videoDef.visible = true;
+					break;
+				case ConstVal.CLOSE_AUDIO:
+					break;
+				case ConstVal.OPEN_AUDIO:
+					break;
+				case ConstVal.SOUND_CHANGE:
+					volume = controlBar.volume;
+					break;
+			}		
+			
+			returnNormal.visible=controlBar.allClosed
+			
+		}		
+		
+		/**点击视频选中麦上用户*/
+		private function choiceById():void {
+			//选中麦上用户
+			if (user == null) {
+				return;
+			}	
+			Log.out(micIndex,"麦","选中用户:",user.uid, user.name);
+			//Log.out("点击用户",user.uid,user.name);		
+			if (ExternalInterface.available){
+				ExternalInterface.call("choiceById", user.uid,user.name);
+			}
+		}
+		
+		/**设置用户自己鲜花数*/
+		public function set myFlowerCount(value:uint):void {
+			_myFlowerCount = value;
+			
+			if (_myFlowerCount == 0) {
+				flowerDef.status = FlowerStatus.FLOWER_EMPTY;				
+			}else if(_myFlowerCount==ConstVal.MAX_FLOWERS_LIMITED) {
+				flowerDef.status = FlowerStatus.FLOWER_FULL;				
+			}else {
+				flowerDef.status = FlowerStatus.FLOWER_GETTING;
+			}
+		}
+		
+		/**送明星花*/
+		private function sendFlowers():void {	
+			
+			
+			
+			if (user == null) {
+				return;
+			}
+			
+			if (RoomModel.getRoomModel().myUserModel.uid>=10000000000) {
+				Log.out("游客不允许献花");
+				return
+			}
+			
+			Log.out(micIndex, "麦", "送花：", user.name,ConstVal.FLOWERS);				
+			
+			//送花
+			if (sendFlowerCount==0&&ConstVal.FLOWERS>0&&(ConstVal.FLOWERS >= ConstVal.MAX_SEND_FLOWERS)) {
+				RoomCmdHandler._self.OperateOtherUser(user.uid, 18, ConstVal.MAX_SEND_FLOWERS);
+				ConstVal.FLOWERS = ConstVal.FLOWERS - ConstVal.MAX_SEND_FLOWERS;
+				ConstVal.FLOWERS = Math.max(0, ConstVal.FLOWERS);
+				
+				sendFlowerCount = ConstVal.MAX_SEND_FLOWERS;
+				
+				flyFlowerAnimation();
+				
+				if (ExternalInterface.available){
+					//ExternalInterface.call("sendFlowers", ConstVal.FLOWERS);
+					Log.out("明星鲜花：restFlowers", ConstVal.FLOWERS);
+					ExternalInterface.call("restFlowers", ConstVal.FLOWERS);
+				}
+			}else if(ConstVal.FLOWERS<ConstVal.MAX_SEND_FLOWERS) {
+				if (ExternalInterface.available) {
+					Log.out("明星献花：你没有积攒够发送数量的鲜花。")
+					ExternalInterface.call("sendFlowersFail", "你没有积攒够发送数量的鲜花。");
+				}
+			}
+			flowerDef.efDef.visible = (flowerDef.status != FlowerStatus.FLOWER_EMPTY&& ConstVal.FLOWERS >= ConstVal.MAX_SEND_FLOWERS);
+		}
+		
+		/**鲜花飞向左上角的动画*/
+		private function flyFlowerAnimation():void 
+		{
+			if (sendFlowerCount <= 0) {
+				return;
+			}
+			
+			flyFlowerDef = new FlyFlowerDef();
+			flyFlowerDef.x = flowerDef.x;
+			flyFlowerDef.y = flowerDef.y;
+			ran_dag = Math.atan2(flowerTxtContainer.y - flowerDef.y, flowerTxtContainer.x - flowerDef.x);			
+			
+			this.addChild(flyFlowerDef);
+			
+			TweenMax.to(flyFlowerDef,1, { x:flowerTxtContainer.x, y:flowerTxtContainer.y, scaleX:.6,scaleY:.6, ease:Cubic.easeInOut,onComplete:animationComplete,onCompleteParams:[flyFlowerDef], onUpdateListener:processHandler} );			
+		}
+		
+		/**清理鲜花动画，回收垃圾*/
+		private function animationComplete(value:FlyFlowerDef):void 
+		{
+			//释放内存占用
+			TweenMax.pauseAll();
+			TweenMax.killAll();		
+			
+			this.removeChild(value);
+			
+			var flowerBoomDef:FlowerBoom = new FlowerBoom();
+			flowerBoomDef.x = flowerTxtContainer.x;
+			flowerBoomDef.y = flowerTxtContainer.y;
+			flowerBoomDef.scaleX = flowerBoomDef.scaleY = .3;
+			this.addChild(flowerBoomDef);
+			
+			sendFlowerCount--;
+			flyFlowerAnimation();
+		}
+		
+		/**飞鲜花时候，后面的星光*/
+		private function processHandler(e:TweenEvent):void 
+		{		
+			if (StarDef.count > 5) {
+				
+				return;
+			}
+			var starDef:MovieClip = new StarDef();
+			starDef.rotation = ran_dag * 180 / Math.PI + 180;			
+			
+			
+			starDef.x = flyFlowerDef.x;
+			starDef.y = flyFlowerDef.y;			
+					
+			this.addChild(starDef);			
+		}
+		
+		
+		/**送明礼物*/
+		private function sendGoods():void {	
+			if (user == null) {
+				return;
+			}
+			Log.out(micIndex,"麦","送礼物：",user.name)
+			if (ExternalInterface.available){
+				ExternalInterface.call("sendGoods", user.getJsObj());
+			}
+		}
+		
+		/**控制音量*/
+		public function set volume(value:Number):void {
+			//trace("音量：", value);
+			soundVolume.volume = value;
+			if (audioStream != null) {				
+				audioStream.soundTransform = soundVolume;
+			}
+		}
+		
+		
+		private function overHandler(e:MouseEvent):void 
+		{					
+			switch(e.type) {
+				case MouseEvent.MOUSE_OVER:
+					
+					if (this.user != null) {						
+						controlBar.visible = true;
+						nameDefSp.visible = false;	
+					}
+					
+					break;
+				case MouseEvent.MOUSE_OUT:
+					if (this.user != null) {						
+						controlBar.visible = false;
+						nameDefSp.visible = true;
+					}
+										
+					break;
+			}				
+			//Log.out("e.target",e.target.name,e.currentTarget.name);
+			//送礼物
+			if (e.target == this.goodsDef) {
+				if (e.type == MouseEvent.MOUSE_OVER) {
+					RoomModel.getRoomModel().iPlayer.tipsTool("赠送礼物", this.goodsDef);
+				}else {
+					RoomModel.getRoomModel().iPlayer.tipsTool("", this.goodsDef);
+				}
+			}			
+			
+			//打开视频
+			if ((e.target is SimpleButton)&&SimpleButton(e.target).name.indexOf("Video")>=0) {
+				if (e.type == MouseEvent.MOUSE_OVER) {
+					RoomModel.getRoomModel().iPlayer.tipsTool("开关视频", SimpleButton(e.target));
+				}else {
+					RoomModel.getRoomModel().iPlayer.tipsTool("", SimpleButton(e.target));
+				}
+			}
+			
+			//打开音频
+			if ((e.target is SimpleButton)&&SimpleButton(e.target).name.indexOf("Audio")>=0) {
+				if (e.type == MouseEvent.MOUSE_OVER) {
+					RoomModel.getRoomModel().iPlayer.tipsTool("开关音频", SimpleButton(e.target));
+				}else {
+					RoomModel.getRoomModel().iPlayer.tipsTool("", SimpleButton(e.target));
+				}
+			}
+		}
+		
+		/**播放视频建立通道*/
+		private function playVideo():void {		
+			Log.out(micIndex, "麦", "正在连接", fmsManager.getFms().ip, fmsManager.getFms().port);
+			
+			var room:String = String(RoomModel.getRoomModel().myRoomInfo.m_szRoomId);
+			netConn = new NetConnection();
+			netConn.client = this;
+			netConn.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler);
+			netConn.addEventListener(AsyncErrorEvent.ASYNC_ERROR,asynErrorHandler)
+			netConn.connect("rtmp://" + serverIp + ":" + serverPort + "/chat", room , String(micIndex), "12349870", true);
+			
+			loadingDef.visible = true;
+			
+			streamInCome = false;
+		}	
+		
+		
+		/**通道和流处理事件*/
+		private function netStatusHandler(e:NetStatusEvent):void 
+		{
+			Log.out(micIndex, "麦", e.info.code);
+			switch(e.info.code) {
+				case "NetConnection.Connect.Success":
+						OnConnect();
+						break;					
+					case "NetConnection.Connect.Closed":
+					case "NetConnection.Connect.Failed":
+					case "NetConnection.Connect.Rejected":
+					case "NetConnection.Connect.AppShutdown":
+					case "NetConnection.Connect.InvalidApp":
+						Log.out(micIndex,"麦","netStatusHandler",e.info.code);
+						fmsManager.getFms().lag = uint.MAX_VALUE;	
+						OnDisconnect();
+						break;
+					
+					case "NetStream.Connect.Success": // e.info.stream
+						OnNetStreamConnect();
+						break;
+					
+					case "NetStream.Connect.Rejected": // e.info.stream
+					case "NetStream.Connect.Failed": // e.info.stream
+						//DoDisconnect();
+						
+						break;
+					case "NetStream.Buffer.Empty":
+						//开始计时
+						if (!bufferTimer.running) {
+							bufferTimer.start();
+						}						
+						break;
+					case "NetStream.MulticastStream.Reset":
+					case "NetStream.Buffer.Full":
+						DoResizeVideo();						
+						if (bufferTimer.running) {
+							//Log.out("如果数据回来30%buffer停止计时器Full");
+							bufferTimer.stop();
+						}						
+						break;
+					default:
+						break;					
+			}
+			
+		}
+		
+		private function DoResizeVideo():void 
+		{
+			
+		}
+		
+		/**流连接成功，处理*/
+		private function OnNetStreamConnect():void 
+		{
+			Log.out("流连接成功","NetStream.Connect.Success")			
+		}
+		
+		private function asynErrorHandler(e:AsyncErrorEvent):void 
+		{
+			Log.out(micIndex,"麦","同步错误")
+		}
+		
+		/**netConnection连接失败，切换ip重连*/
+		private function OnDisconnect():void 
+		{			
+			retry();
+		}
+		
+		/**切换fms重新连接*/
+		private function retry():void {
+			//Log.out(micIndex, "麦", "重连FMS");				
+			
+			//fmsManager.getFms().lag = uint.MAX_VALUE;
+			
+			fmsManager.resortFMS();			
+			
+			if (fmsManager.getFms().lag == uint.MAX_VALUE) {				
+				getMoreFMS()
+				return;
+			}
+			
+			serverIp = fmsManager.getFms().ip;
+			serverPort = String(fmsManager.getFms().port);
+			Log.out(micIndex, "麦", "重连FMS", fmsManager.getFms().ip, fmsManager.getFms().port, "当前fms的质量：", fmsManager.getFms().lag);
+			
+			gc();	
+			
+			playVideo();
+		}
+		
+		/**fms列表空了以后，请求新列表*/
+		public function getMoreFMS():void {	
+			
+			if (fmsManager.status != FmsEvent.FMS_GETTING) {
+				Log.out(micIndex, "麦", "请求Fms服务器");						
+				fmsManager.dispatchEvent(new FmsEvent(FmsEvent.FMS_GETTING));	
+			}
+			if (timer.hasEventListener(TimerEvent.TIMER)) {
+				timer.removeEventListener(TimerEvent.TIMER,checkfmshandler);
+			}
+			
+			timer.addEventListener(TimerEvent.TIMER, checkfmshandler);
+			
+			if (!timer.running) {
+				timer.start();
+			}
+			
+		}
+		
+		/**请求反馈检测*/
+		protected function checkfmshandler(event:TimerEvent):void
+		{			
+			if(fmsManager.status==FmsEvent.FMS_RECEIVE){
+				timer.removeEventListener(TimerEvent.TIMER, checkfmshandler);
+				timer.reset();
+				Log.out(micIndex,"麦","请求FMs成功，重新连接")
+				Log.out(micIndex,"麦",fmsManager.toString())
+				retry();	
+				return;
+			}
+			//25秒fms没下来
+			if (timer.currentCount > 200) {
+				timer.reset();
+				timer.removeEventListener(TimerEvent.TIMER, checkfmshandler);
+				Log.out(micIndex,"麦","向CAS请求FMS地址超过25秒,重置Lag");
+				//this.closeMic();	
+				//getMoreFMS()
+				fmsManager.resetAllLag();
+				fmsManager.status = FmsEvent.FMS_RECEIVE;
+				retry();
+			}
+		}
+		
+		/**netConnection连接成功*/
+		private function OnConnect():void 
+		{
+			Log.out(micIndex, "麦", "OnConnect 连接成功", fmsManager.getFms().ip, fmsManager.getFms().port);	
+			
+			//建立视频流
+			var fileStr:String = "stream_room_" + RoomModel.getRoomModel().myRoomInfo.m_szRoomId + "_" + String(micIndex+1);
+			videoStream = new NetStream(netConn);
+			videoStream.client = this;
+			videoStream.addEventListener(NetStatusEvent.NET_STATUS, netStatusHandler);
+			videoStream.addEventListener(AsyncErrorEvent.ASYNC_ERROR, asynErrorHandler);
+			videoStream.bufferTime = 1;					
+			videoStream.bufferTimeMax = videoStream.bufferTime * 4;
+			videoStream.receiveAudio(false);			
+			videoStream.play(fileStr + "_v");				
+			videoDef.attachNetStream(videoStream);		
+			
+			//建立音频流
+			audioStream = new NetStream(netConn);
+			audioStream.client = this;
+			audioStream.bufferTime = 1;
+			audioStream.bufferTimeMax = audioStream.bufferTime * 4;
+			audioStream.receiveVideo(false);
+			volume = controlBar.volume;
+			audioStream.play(fileStr + "_a");
+			
+			loadingDef.visible = false;
+			
+			//bufferlength检查器启动
+			bufferLengthChecker.reset();
+			bufferLengthChecker.start();
+			
+			//启动音频状态检查
+			audioTimer.addEventListener(TimerEvent.TIMER, audioTimerHandler);
+			audioTimer.start();
+		}
+		
+		/**检测麦上说话状态*/
+		private function audioTimerHandler(e:TimerEvent):void 
+		{
+			if (audioStream == null) {
+				return;
+			}
+			micStatusDef.open =(audioStream.info.currentBytesPerSecond > 0);
+			//Log.out("videoView：",micIndex,"cbs",audioStream.info.currentBytesPerSecond,"abl",audioStream.info.audioBufferLength);
+		}		
+		
+		
+		/**关闭麦上用户视频*/
+		public function closeMic():String {
+			Log.out(micIndex, "麦", "用户下麦了")
+			flowerText.text = "";
+			userNameTxt.text = "";
+			controlBar.visible = false;
+			//zoneDef.visible = false;
+			starLevelDef.visible = false;	
+			starLevelDef.graphics.clear();
+			
+			this.videoDef.clear();
+			_user = null;
+			
+			hideAll()
+			
+			_flowerCount = 0;
+			flowerText.text = "" + _flowerCount;
+			roomStateChange(0);
+			
+			gc();
+			
+			onMicDef.visible = true;
+			
+			return "关闭执行";
+		}
+		
+		/**下麦隐藏按钮*/
+		private function hideAll():void {
+			controlBar.visible = false;
+			zoneDef.visible = false;
+			goodsDef.visible = false;
+			flowerDef.visible = false;
+			micStatusDef.visible = false;
+			weChatDef.visible = false;
+		}
+		
+		/**执行清除*/
+		public function gc():void {
+			//清除videostream事件
+			if (videoStream!=null&&videoStream.hasEventListener(NetStatusEvent.NET_STATUS)) {
+				videoStream.removeEventListener(NetStatusEvent.NET_STATUS, netStatusHandler);
+			}
+			if (videoStream!=null&&videoStream.hasEventListener(AsyncErrorEvent.ASYNC_ERROR)) {
+				videoStream.removeEventListener(AsyncErrorEvent.ASYNC_ERROR, asynErrorHandler);
+			}
+			//清除通道netConn事件
+			if (netConn!=null&&netConn.hasEventListener(NetStatusEvent.NET_STATUS)) {
+				netConn.removeEventListener(NetStatusEvent.NET_STATUS, netStatusHandler);
+			}
+			if (netConn!=null&&netConn.hasEventListener(AsyncErrorEvent.ASYNC_ERROR)) {
+				netConn.removeEventListener(AsyncErrorEvent.ASYNC_ERROR, asynErrorHandler);
+			}			
+			//清除fms检测计时器
+			if (timer.hasEventListener(TimerEvent.TIMER)) {
+				timer.removeEventListener(TimerEvent.TIMER, checkfmshandler);
+			}
+			if (audioTimer.hasEventListener(TimerEvent.TIMER)) {
+				audioTimer.removeEventListener(TimerEvent.TIMER, audioTimerHandler);
+			}
+			
+			//关闭音频
+			if (audioStream != null) {
+				audioStream.close();				
+			}
+			//关闭视频
+			if (videoStream != null) {
+				videoStream.close();
+				videoDef.attachNetStream(null);
+			}	
+			//停止计时器
+			if (bufferTimer.running) {
+				bufferTimer.stop();
+			}			
+			if (bufferLengthChecker.running) {
+				bufferLengthChecker.stop();
+				
+			}
+			//关闭通道	
+			if (netConn != null&&netConn.connected) {
+				netConn.close();
+			}
+			
+			audioTimer.stop();
+			micStatusDef.open = false;
+			timer.stop();
+			netConn = null;
+			videoStream = null;
+			audioStream = null;
+		}
+		
+		/**获取当前麦上用户*/
+		public function get user():UserInfo 
+		{
+			return _user;
+		}
+		
+		/**
+		 * 当前麦上用户设置
+		 * @param value:UserInfo 用户数据模型
+		 * */
+		public function set user(value:UserInfo):void 
+		{
+			_user = value;					
+			userNameTxt.text = user.name;
+			//明星等级标识
+			if (user.userLevel > 0) {
+				starLevelDef.visible = true;
+				//starLevelDef.gotoAndStop(user.userLevel);
+				Log.out("ico", ConstVal.BITMAPDATA, user.userLevel)
+				
+				starLevelDef.graphics.lineStyle(1, 0, 0);
+				
+				starLevelDef.graphics.beginBitmapFill(ConstVal.BITMAPDATA,new Matrix(1,0,0,1,-uint((user.userLevel-1)/10)*ConstVal.ICO_WIDTH,-((user.userLevel-1)%10)*ConstVal.ICO_HEIGHT))
+	
+				starLevelDef.graphics.drawRect(0,0,ConstVal.ICO_WIDTH,ConstVal.ICO_HEIGHT);
+			
+				starLevelDef.graphics.endFill();
+			}	
+			
+			userNameTxt.x = user.userLevel > 0?starLevelDef.width + starLevelDef.x:starLevelDef.x;
+			//controlBar.visible = true;
+			
+			//空间标识
+			zoneDef.visible = true;
+			goodsDef.visible = true;
+			micStatusDef.visible = true;
+			onMicDef.visible = false;
+			weChatDef.visible = true;
+			
+			var fms:FmsModel = fmsManager.getFms();
+			
+			if (fms != null) {
+				serverIp = fms.ip;
+				serverPort = String(fms.port);
+			}else {
+				getMoreFMS();
+			}
+			
+			gc()			
+			
+			playVideo();
+		}
+		
+		/**获取麦序*/		
+		public function get micIndex():uint 
+		{
+			return _micIndex;
+		}
+		/**设置麦序*/
+		public function set micIndex(value:uint):void 
+		{
+			_micIndex = value;		
+			weChatDef.mic = micIndex;
+		}		
+		
+		/**增加麦上鲜花数*/
+		public function set addFlower(value:uint):void 
+		{
+			_flowerCount += value;
+			flowerText.text = "" + _flowerCount;
+		}
+		
+		/**通道连接成功回调*/
+		public function onBWDone(value:Object):void {
+			Log.out(micIndex,"麦","通道连接成功",JSON.encode(value));
+		}
+		/**流连接成功回调*/
+		public function onMetaData(value:Object):void {
+			Log.out(micIndex,"麦","流连接成功", JSON.encode(value));			
+			
+			//videoDef.mask = videoMaskDef;
+		}
+		/**遮罩video*/
+		private function createMaskDef():Shape {
+			var sp:Shape = new Shape();
+			sp.graphics.beginFill(0x343434, 0);
+			sp.graphics.drawRect(-videoBackgroundBut.width*.5, -videoBackgroundBut.height*.5, videoBackgroundBut.width, videoBackgroundBut.height);
+			sp.graphics.endFill();
+			return sp;
+		}
+	}
+
+}
